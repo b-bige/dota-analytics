@@ -34,7 +34,10 @@ def create_table_from_df(df, table_name, conn_str):
             create_table_query = f'CREATE TABLE IF NOT EXISTS "{table_name}" ({schema});'
             with conn.cursor() as cur:
                 cur.execute(create_table_query)
-            conn.commit()
+            if primary_key_assigned:
+                conn.commit()
+            else:
+                raise KeyError
     except Exception as e:
         print(f"Error creating table '{table_name}': {e}")
         return

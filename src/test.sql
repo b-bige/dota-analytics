@@ -16,3 +16,5 @@ SELECT * FROM leagues;
 SELECT * FROM matches;
 
 SELECT DISTINCT leagueid FROM leagues;
+
+SELECT * FROM patches;
