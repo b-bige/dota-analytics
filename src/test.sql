@@ -8,3 +8,11 @@ SELECT * FROM leagues WHERE leagueid = 18660;
 BEGIN;
 
 ROLLBACK;
+
+SELECT * FROM leagues WHERE name LIKE '%FISSURE%';
+
+SELECT * FROM leagues;
+
+SELECT * FROM matches;
+
+SELECT DISTINCT leagueid FROM leagues;
