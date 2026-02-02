@@ -13,7 +13,7 @@ SELECT * FROM leagues WHERE name LIKE '%FISSURE%';
 
 SELECT * FROM leagues;
 
-SELECT * FROM matches;
+SELECT * FROM matches ORDER BY start_date ASC;
 
 SELECT DISTINCT leagueid FROM leagues;
 
