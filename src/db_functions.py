@@ -1,5 +1,6 @@
 import pandas as pd 
 import psycopg
+import httpx
 
 def get_pg_type(pandas_type):
     if pd.api.types.is_integer_dtype(pandas_type):
@@ -65,3 +66,14 @@ def insert_df_into_table(df, table_name, conn_str):
         print(f"Error inserting data into table '{table_name}': {e}")
         return
     print(f"Data inserted into table '{table_name}' successfully.")
+
+def query_stratz(query: str, headers, api_url, variables={}):
+    with httpx.Client(headers=headers) as client:
+        response = client.post(
+            url=api_url,
+            json={'query': query, 'variables': variables}
+        )
+        result = response.json()
+        if "errors" in result:
+            raise Exception(f"GraphQL Error: {result['errors']}")
+        return result
