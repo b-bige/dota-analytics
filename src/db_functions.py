@@ -13,7 +13,7 @@ def get_pg_type(pandas_type):
     else:
         return "TEXT"
     
-def create_table_from_df(df, table_name, conn_str, convert_dtypes: True):
+def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_serial_id=False):
     # 1. Generate column definitions
     if convert_dtypes:
         schema_df = df.convert_dtypes()
@@ -23,6 +23,8 @@ def create_table_from_df(df, table_name, conn_str, convert_dtypes: True):
         with psycopg.connect(conn_str) as conn:
             cols = []
             primary_key_assigned = False
+            if add_serial_id:
+                schema_df.insert(0, 'id', range(len(schema_df)))
             for col_name, dtype in zip(schema_df.columns, schema_df.dtypes):
                 if 'id' in col_name.lower() and not primary_key_assigned:
                     pg_type = "BIGSERIAL"
@@ -47,6 +49,7 @@ def create_table_from_df(df, table_name, conn_str, convert_dtypes: True):
     print(f"Table '{table_name}' created successfully.")
 
 def insert_df_into_table(df, table_name, conn_str):
+    df = df.convert_dtypes()
     clean_df = df.astype(object).where(pd.notnull(df), None)
     try:
         with psycopg.connect(conn_str) as conn:

@@ -13,7 +13,8 @@ SELECT * FROM leagues WHERE name LIKE '%FISSURE%';
 
 SELECT * FROM leagues;
 
-SELECT * FROM matches ORDER BY start_date ASC;
+SELECT * FROM matches WHERE start_date >= '2025-03-01 00:00:00' ORDER BY start_date ASC;
+SELECT COUNT(start_date) FROM matches WHERE start_date >= '2025-02-21 00:00:00';
 
 SELECT COUNT(*) FROM matches;
 SELECT DISTINCT leagueid FROM leagues;
@@ -23,3 +24,12 @@ SELECT * FROM patches;
 SELECT * FROM npcs WHERE id=17;
 
 SELECT * FROM heroes;
+
+SELECT * FROM match_win_rates;
+
+SELECT * FROM match_players;
+
+SELECT * FROM match_runes;
+SELECT DISTINCT * FROM match_details WHERE id=8187923027;
+
+SELECT COUNT(DISTINCT match_id) FROM match_leads;
