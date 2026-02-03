@@ -13,9 +13,12 @@ def get_pg_type(pandas_type):
     else:
         return "TEXT"
     
-def create_table_from_df(df, table_name, conn_str):
+def create_table_from_df(df, table_name, conn_str, convert_dtypes: True):
     # 1. Generate column definitions
-    schema_df = df.convert_dtypes()
+    if convert_dtypes:
+        schema_df = df.convert_dtypes()
+    else:
+        schema_df = df
     try:
         with psycopg.connect(conn_str) as conn:
             cols = []

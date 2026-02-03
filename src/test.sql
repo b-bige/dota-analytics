@@ -15,8 +15,11 @@ SELECT * FROM leagues;
 
 SELECT * FROM matches ORDER BY start_date ASC;
 
+SELECT COUNT(*) FROM matches;
 SELECT DISTINCT leagueid FROM leagues;
 
 SELECT * FROM patches;
+
+SELECT * FROM npcs WHERE id=17;
 
 SELECT * FROM heroes;
