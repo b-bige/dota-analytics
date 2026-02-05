@@ -1,5 +1,6 @@
 import pandas as pd 
 import psycopg
+from psycopg.types.json import Jsonb
 import httpx
 
 def get_pg_type(pandas_type):
@@ -14,7 +15,7 @@ def get_pg_type(pandas_type):
     else:
         return "TEXT"
     
-def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_serial_id=False):
+def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_serial_id=False, jsonb_cols=[]):
     # 1. Generate column definitions
     if convert_dtypes:
         schema_df = df.convert_dtypes()
@@ -27,6 +28,8 @@ def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_seri
             if add_serial_id:
                 schema_df.insert(0, 'id', range(len(schema_df)))
             for col_name, dtype in zip(schema_df.columns, schema_df.dtypes):
+                if col_name in jsonb_cols:
+                    continue
                 if 'id' in col_name.lower() and not primary_key_assigned:
                     pg_type = "BIGSERIAL"
                     cols.append(f'"{col_name}" {pg_type} PRIMARY KEY')
@@ -35,6 +38,8 @@ def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_seri
                     pg_type = get_pg_type(dtype)
                     # Wrap column names in quotes to handle spaces or reserved words
                     cols.append(f'"{col_name}" {pg_type}')
+            for col_name in jsonb_cols:
+                cols.append(f'"{col_name}" JSONB')
             
             schema = ", ".join(cols)
             create_table_query = f'CREATE TABLE IF NOT EXISTS "{table_name}" ({schema});'
@@ -49,9 +54,12 @@ def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_seri
         return
     print(f"Table '{table_name}' created successfully.")
 
-def insert_df_into_table(df, table_name, conn_str):
+def insert_df_into_table(df, table_name, conn_str, jsonb_cols=[]):
     df = df.convert_dtypes()
     clean_df = df.astype(object).where(pd.notnull(df), None)
+    for col in jsonb_cols:
+        if col in clean_df.columns:
+            clean_df[col] = clean_df[col].apply(lambda x: Jsonb(x) if x is not None else None)
     try:
         with psycopg.connect(conn_str) as conn:
             with conn.cursor() as cur:

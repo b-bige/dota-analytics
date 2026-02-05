@@ -35,3 +35,5 @@ SELECT DISTINCT * FROM match_details WHERE id=8187923027;
 SELECT COUNT(DISTINCT match_id) FROM match_leads;
 
 SELECT DISTINCT variant FROM match_players;
+
+SELECT pg_size_pretty(pg_database_size('dota'));
