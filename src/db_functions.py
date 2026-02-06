@@ -1,6 +1,7 @@
 import pandas as pd 
 import psycopg
 from psycopg.types.json import Jsonb
+from psycopg import sql
 import httpx
 
 def get_pg_type(pandas_type):
@@ -14,6 +15,19 @@ def get_pg_type(pandas_type):
         return "TIMESTAMP"
     else:
         return "TEXT"
+    
+def query_select(conn_str, query, identifiers=None, params=None):
+    with psycopg.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            if identifiers:
+                final_query = sql.SQL(query).format(*[sql.Identifier(name) for name in identifiers])
+            else:
+                final_query = sql.SQL(query)
+            cur.execute(final_query, params)
+            
+            if cur.description:
+                return cur.fetchall()
+            return None
     
 def create_table_from_df(df, table_name, conn_str, convert_dtypes=True, add_serial_id=False, jsonb_cols=[]):
     # 1. Generate column definitions

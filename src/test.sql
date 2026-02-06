@@ -13,8 +13,7 @@ SELECT * FROM leagues WHERE name LIKE '%FISSURE%';
 
 SELECT * FROM leagues;
 
-SELECT * FROM matches WHERE start_date >= '2025-03-01 00:00:00' ORDER BY start_date ASC;
-SELECT COUNT(start_date) FROM matches WHERE start_date >= '2025-02-21 00:00:00';
+SELECT COUNT(*) FROM matches WHERE start_date >= '2025-03-01 00:00:00';
 
 SELECT COUNT(*) FROM matches;
 SELECT DISTINCT leagueid FROM leagues;
@@ -37,3 +36,13 @@ SELECT COUNT(DISTINCT match_id) FROM match_leads;
 SELECT DISTINCT variant FROM match_players;
 
 SELECT pg_size_pretty(pg_database_size('dota'));
+
+SELECT * FROM information_schema.tables;
+
+SELECT COUNT(*) FROM matches;
+SELECT COUNT(id) FROM match_details;
+
+SELECT COUNT(start_date) FROM matches WHERE start_date >= '2025-02-21 00:00:00';
+
+SELECT * FROM match_players;
+
