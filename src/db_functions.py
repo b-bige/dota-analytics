@@ -82,7 +82,8 @@ def insert_df_into_table(df, table_name, conn_str, jsonb_cols=[]):
                 with cur.copy(copy_query) as copy:
                     for row in clean_df.itertuples(index=False):
                         copy.write_row(row)
-                placeholders = ", ".join(["%s"] * len(clean_df.columns))
+                seq_query = f"SELECT setval(pg_get_serial_sequence('\"{table_name}\"', 'id'), max(id)) FROM \"{table_name}\";"
+                cur.execute(seq_query) #TODO: edit seq_query so it finds the first column with id in lowercase
             conn.commit()
     except Exception as e:
         print(f"Error inserting data into table '{table_name}': {e}")

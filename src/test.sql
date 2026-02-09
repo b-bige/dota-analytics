@@ -46,3 +46,21 @@ SELECT COUNT(start_date) FROM matches WHERE start_date >= '2025-02-21 00:00:00';
 
 SELECT * FROM match_players;
 
+SELECT roles FROM heroes;
+
+SELECT * FROM patches;
+
+SELECT * FROM item_details WHERE id = 16;
+
+SELECT id, localized_name FROM heroes;
+
+SELECT id, localized_name FROM heroes WHERE localized_name = 'Invoker';
+
+SELECT id, localized_name FROM heroes WHERE id = 42;
+
+SELECT * FROM hero_stats;
+
+SELECT * FROM matchup_with;
+
+
+SELECT COUNT(DISTINCT week) FROM matchup_lane_outcome;
