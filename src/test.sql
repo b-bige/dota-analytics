@@ -39,7 +39,7 @@ SELECT pg_size_pretty(pg_database_size('dota'));
 
 SELECT * FROM information_schema.tables;
 
-SELECT COUNT(*) FROM matches;
+SELECT * FROM matches WHERE start_date >= '2025-02-21 00:00:00';
 SELECT COUNT(id) FROM match_details;
 
 SELECT COUNT(start_date) FROM matches WHERE start_date >= '2025-02-21 00:00:00';
@@ -79,3 +79,12 @@ SELECT * FROM hero_facets WHERE "abilityId" = 1281;
 SELECT COUNT(DISTINCT "heroId") FROM hero_facets;
 
 SELECT * FROM ability_details;
+
+SELECT * FROM match_players WHERE match_id = 8183642521;
+
+SELECT COUNT(DISTINCT match_id) FROM match_players WHERE steam_account_id IS NOT NULL;
+SELECT * FROM match_details WHERE match_details."radiantTeamId" = 8261500 ORDER BY "startDateTime" DESC;
+
+SELECT column_name FROM information_schema.columns WHERE table_name = 'match_details';
+
+SELECT * FROM match_details WHERE match_details."radiantTeamId" = 8261500;
