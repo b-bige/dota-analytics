@@ -66,3 +66,16 @@ SELECT * FROM matchup_with;
 SELECT COUNT(DISTINCT week) FROM matchup_lane_outcome;
 
 SELECT DISTINCT week FROM hero_item_full_purchase ORDER BY week;
+
+SELECT * FROM heroes WHERE id = 64;
+SELECT DISTINCT mp."heroId", heroes.localized_name 
+FROM match_players mp
+INNER JOIN heroes
+ON mp."heroId" = heroes.id
+WHERE mp.variant BETWEEN 3 AND 7;
+
+SELECT * FROM hero_facets WHERE "abilityId" = 1281;
+
+SELECT COUNT(DISTINCT "heroId") FROM hero_facets;
+
+SELECT * FROM ability_details;
