@@ -64,3 +64,5 @@ SELECT * FROM matchup_with;
 
 
 SELECT COUNT(DISTINCT week) FROM matchup_lane_outcome;
+
+SELECT DISTINCT week FROM hero_item_full_purchase ORDER BY week;
