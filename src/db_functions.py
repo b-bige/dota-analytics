@@ -16,7 +16,7 @@ def get_pg_type(pandas_type):
     else:
         return "TEXT"
     
-def query_select_to_df(conn_str, query, table_name=None, identifiers=None, params=None):
+def query_select_to_df(conn_str, query, table_name=None, columns=None, identifiers=None, params=None):
     with psycopg.connect(conn_str) as conn:
         with conn.cursor() as cur:
             if identifiers:
@@ -27,9 +27,12 @@ def query_select_to_df(conn_str, query, table_name=None, identifiers=None, param
             
             if cur.description:
                 data = cur.fetchall()
-                colname_query = 'SELECT column_name FROM information_schema.columns WHERE table_name = %s'
-                cur.execute(colname_query, params=(table_name, ))
-                colnames = [colname[0] for colname in cur.fetchall()]
+                if columns: 
+                    colnames = columns
+                else:
+                    colname_query = 'SELECT column_name FROM information_schema.columns WHERE table_name = %s'
+                    cur.execute(colname_query, params=(table_name, ))
+                    colnames = [colname[0] for colname in cur.fetchall()]
                 return pd.DataFrame(data, columns=colnames)
             return None
         
