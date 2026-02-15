@@ -104,3 +104,7 @@ SELECT id, ld."displayName", ld."tournamentUrl", ld."prizePool", ld."basePrizePo
 FROM league_details ld 
 WHERE ld."prizePool" > 500000
 ORDER BY "startDateTime" DESC;
+
+SELECT * FROM match_players WHERE match_id = 8461735141
+
+SELECT * FROM match_details;

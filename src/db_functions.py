@@ -136,73 +136,73 @@ def query_stratz(query: str, headers, api_url, variables={}):
 def query_match(conn_str, headers, api_url, match_ids):
     query = """
         query($id: Long!) {
-        match(id: $id) {
-            id
-            tournamentId
-            tournamentRound
-            leagueId
-            radiantTeamId
-            direTeamId
-            seriesId
-            gameVersionId
-            regionId
-            clusterId
-            didRadiantWin
-            startDateTime
-            endDateTime
-            durationSeconds
-            firstBloodTime
-            towerStatusRadiant
-            towerStatusDire
-            barracksStatusRadiant
-            barracksStatusDire
-            rank
-            actualRank
-            averageRank
-            averageImp
-            bracket
-            analysisOutcome
-            topLaneOutcome
-            midLaneOutcome
-            bottomLaneOutcome
-            predictedOutcomeWeight
-            pickBans {
-            isPick
-            heroId
-            order
-            isRadiant
-            }
-            chatEvents {
-            time
-            type
-            fromHeroId
-            toHeroId
-            value
-            pausedTick
-            isRadiant
-            }
-            predictedWinRates
-            winRates
-            radiantNetworthLeads
-            radiantExperienceLeads
-            radiantKills
-            direKills
-            towerDeaths {
-            time
-            npcId
-            isRadiant
-            attacker
-            }
-            towerStatus {
-            towers {
-                npcId
-                hp
-            }
-            outposts {
-                npcId
-                isControlledByRadiant
-                isRadiantSide
-            }
+            match(id: $id) {
+                id
+                tournamentId
+                tournamentRound
+                leagueId
+                radiantTeamId
+                direTeamId
+                seriesId
+                gameVersionId
+                regionId
+                clusterId
+                didRadiantWin
+                startDateTime
+                endDateTime
+                durationSeconds
+                firstBloodTime
+                towerStatusRadiant
+                towerStatusDire
+                barracksStatusRadiant
+                barracksStatusDire
+                rank
+                actualRank
+                averageRank
+                averageImp
+                bracket
+                analysisOutcome
+                topLaneOutcome
+                midLaneOutcome
+                bottomLaneOutcome
+                predictedOutcomeWeight
+                pickBans {
+                    isPick
+                    heroId
+                    order
+                    isRadiant
+                }
+                chatEvents {
+                    time
+                    type
+                    fromHeroId
+                    toHeroId
+                    value
+                    pausedTick
+                    isRadiant
+                }
+                predictedWinRates
+                winRates
+                radiantNetworthLeads
+                radiantExperienceLeads
+                radiantKills
+                direKills
+                towerDeaths {
+                    time
+                    npcId
+                    isRadiant
+                    attacker
+                }
+                towerStatus {
+                    towers {
+                        npcId
+                        hp
+                    }
+                outposts {
+                    npcId
+                    isControlledByRadiant
+                    isRadiantSide
+                }
             }
             players {
             heroId
@@ -453,13 +453,18 @@ def query_match(conn_str, headers, api_url, match_ids):
         df_outpost_updates = pd.DataFrame(outpost_updates)
         df_players = pd.json_normalize(result_json['players'])
         df_players.insert(0, 'match_id', result_json['id'])
-        df_steam_account = pd.json_normalize(df_players['steamAccount'])
-        og_cols = df_steam_account.columns
-        new_cols = [str.replace(colname, '.', '_') for colname in df_steam_account.columns]
+        og_cols = []
+        stat_cols = []
+        for colname in df_players.columns:
+            if colname.startswith('steamAccount.'):
+                og_cols.append(colname)
+                continue
+            if colname.startswith('stats.'):
+                stat_cols.append(colname)
+        new_cols = [str.replace(colname[13:], '.', '_') for colname in og_cols]
         col_mapper = {og_col: new_col for og_col, new_col in zip(og_cols, new_cols)}
-        df_steam_account = df_steam_account.rename(col_mapper, axis=1)
-        df_players = df_players.drop('steamAccount', axis=1)
-        df_players = pd.concat([df_players, df_steam_account], axis=1)
+        df_players = df_players.rename(col_mapper, axis=1)
+        df_players = df_players.drop(stat_cols, axis=1)
         df_performance_metrics = pd.DataFrame(columns=performance_metrics_columns)
         df_death_events = pd.DataFrame(columns=['match_id', 'hero_id', 'time', 'attacker', 'isDieBack'])
         df_farm = pd.DataFrame(columns=['match_id', 'hero_id', 'source_type', 'id',	'gold'])
