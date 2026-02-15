@@ -108,3 +108,7 @@ ORDER BY "startDateTime" DESC;
 SELECT * FROM match_players WHERE match_id = 8461735141
 
 SELECT * FROM match_details;
+
+SELECT DISTINCT md."radiantTeamId" FROM match_details md;
+
+SELECT DISTINCT md."direTeamId" FROM match_details md;
