@@ -92,3 +92,7 @@ SELECT * FROM match_details WHERE match_details."radiantTeamId" = 8261500;
 SELECT * FROM match_players WHERE match_players."steamAccountId" IS NOT NULL;
 
 SELECT DISTINCT match_id FROM match_players mp WHERE mp."steamAccountId" IS NOT NULL;
+
+SELECT DISTINCT match_id FROM match_players mp WHERE mp."steamAccountId" IS NULL;
+
+SELECT * FROM match_details;

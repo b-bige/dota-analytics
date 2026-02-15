@@ -16,6 +16,19 @@ def get_pg_type(pandas_type):
     else:
         return "TEXT"
     
+def query_select(conn_str, query, identifiers=None, params=None):
+    with psycopg.connect(conn_str) as conn:
+        with conn.cursor() as cur:
+            if identifiers:
+                final_query = sql.SQL(query).format(*[sql.Identifier(name) for name in identifiers])
+            else:
+                final_query = sql.SQL(query)
+            cur.execute(final_query, params)
+            if cur.description:
+                return cur.fetchall()
+            else:
+                return None
+    
 def query_select_to_df(conn_str, query, table_name=None, columns=None, identifiers=None, params=None):
     with psycopg.connect(conn_str) as conn:
         with conn.cursor() as cur:
