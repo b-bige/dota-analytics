@@ -96,3 +96,11 @@ SELECT DISTINCT match_id FROM match_players mp WHERE mp."steamAccountId" IS NOT 
 SELECT DISTINCT match_id FROM match_players mp WHERE mp."steamAccountId" IS NULL;
 
 SELECT * FROM match_details;
+
+SELECT DISTINCT md."leagueId" FROm match_details md;
+SELECT * FROM league_details ld;
+
+SELECT id, ld."displayName", ld."tournamentUrl", ld."prizePool", ld."basePrizePool", ld."startDateTime"
+FROM league_details ld 
+WHERE ld."prizePool" > 500000
+ORDER BY "startDateTime" DESC;
