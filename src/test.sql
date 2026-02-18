@@ -123,3 +123,5 @@ SELECT * FROM league_details ld WHERE ld."displayName" LIKE '%International%' AN
 SELECT * FROM league_details ld WHERE ld."displayName" LIKE 'FISSURE%' AND ld."displayName" NOT LIKE '%Special' AND ld."prizePool" <> 0;
 
 SELECT * FROM league_details ld WHERE ld."displayName" LIKE '%Clavision%' AND ld."prizePool" <> 0;
+
+SELECT * FROM patches;
