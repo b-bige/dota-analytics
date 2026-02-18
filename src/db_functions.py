@@ -6,6 +6,7 @@ import httpx
 import time
 import os
 from dotenv import load_dotenv
+import logging
 
 class DotaDB:
     def __init__(self):
@@ -138,8 +139,7 @@ class DotaDB:
                 raise Exception(f"GraphQL Error: {result['errors']}")
             return result
 
-    def query_match(self, match_ids):
-        conn_str = self.conn_str
+    def query_matches(self, match_ids):
         query = """
             query($id: Long!) {
                 match(id: $id) {
@@ -335,344 +335,152 @@ class DotaDB:
             }
             }
         """
-        ## Preparing column lists for parsing matches to sql
-        cols_to_include = [
-            'id',
-            'tournamentId',
-            'tournamentRound',
-            'leagueId',
-            'radiantTeamId',
-            'direTeamId',
-            'seriesId',
-            'gameVersionId',
-            'regionId',
-            'clusterId',
-            'didRadiantWin',
-            'startDateTime',
-            'endDateTime',
-            'durationSeconds',
-            'firstBloodTime',
-            'towerStatusRadiant',
-            'towerStatusDire',
-            'barracksStatusRadiant',
-            'barracksStatusDire',
-            'rank',
-            'actualRank',
-            'averageRank',
-            'averageImp',
-            'bracket',
-            'analysisOutcome',
-            'topLaneOutcome',
-            'midLaneOutcome',
-            'bottomLaneOutcome',
-            'predictedOutcomeWeight'
-        ]
-        performance_metrics_columns = [
-            'match_id',
-            'hero_id',
-            'minute',
-            'gold_per_minute',
-            'networth_per_minute',
-            'experience_per_minute',
-            'tower_damage_per_minute',
-            'camp_stack'
-        ]
+        table_map = {
+            'details': 'match_details', 'pickBans': 'match_pick_bans', 'chatEvents': 'match_chat_events',
+            'predictedWinRates': 'match_predicted_win_rates', 'winRates': 'match_win_rates', 
+            'leads': 'match_leads', 'towerDeaths': 'match_tower_deaths', 'towerStatus': 'match_tower_updates', 
+            'snapshots': 'match_snapshots', 'outposts': 'match_outposts', 'players': 'match_players', 
+            'impPerMinute': 'match_imp_per_minute', 'performanceMetrics': 'match_performance_metrics', 
+            'deathEvents': 'match_death_events', 'farmDistributionReport': 'match_farm', 
+            'itemPurchases': 'match_purchases', 'courierKills': 'match_courier_kills', 'runes': 'match_runes',
+            'wards': 'match_wards', 'wardDestruction': 'match_ward_destructions'
+        }
+
+        # 2. Initialize storage for ALL matches
+        storage = {key: [] for key in table_map.keys()}
+
         for iteration, match_id in enumerate(match_ids):
-            print(f'Currently processing iteration {iteration}')
-            start_time = time.time()
-            variables = {'id': match_id}
-            result = self.query_stratz(query, headers=self.headers, api_url=self.api_url, variables=variables)
-            result_json = result['data']['match']
-            filtered_match_details = {k: result_json[k] for k in cols_to_include}
-            df_match_details = pd.DataFrame([filtered_match_details])
-            df_pickbans = pd.DataFrame(result_json['pickBans'])
-            df_pickbans.insert(0, 'match_id', result_json['id'])
+            logging.info(f"Processing {match_id} ({iteration+1}/{len(match_ids)})")
+            
             try:
-                df_chatevents = pd.json_normalize(result_json['chatEvents'])
-            except:
-                result = self.query_stratz(query, headers=self.headers, api_url=self.api_url, variables=variables)
-                result_json = result['data']['match']
-                try:
-                    df_chatevents = pd.json_normalize(result_json['chatEvents'])
-                except:
-                    continue
-            df_chatevents.insert(0, 'match_id', result_json['id'])
-            try:
-                df_predicted_win_rates = pd.DataFrame({
-                    'match_id': result_json['id'],
-                    'predicted_win_rate': result_json['predictedWinRates']
-                })
-            except:
-                result = self.query_stratz(query, headers=self.headers, api_url=self.api_url, variables=variables)
-                result_json = result['data']['match']
-                try:
-                    df_predicted_win_rates = pd.DataFrame({
-                    'match_id': result_json['id'],
-                    'predicted_win_rate': result_json['predictedWinRates']
-                    })
-                except:
-                    continue
-            df_win_rates = pd.DataFrame({
-                'match_id': result_json['id'],
-                'win_rates': result_json['winRates'], 
-            })
-            df_kills = pd.DataFrame({
-                'match_id': result_json['id'],
-                'radiant_kills': result_json['radiantKills'],
-                'dire_kills': result_json['direKills']
-            })
-            df_leads = pd.DataFrame({
-                'match_id': result_json['id'],
-                'radiant_networth_leads': result_json['radiantNetworthLeads'],
-                'radiant_experience_leads': result_json['radiantExperienceLeads']
-            })
-            df_tower_deaths = pd.json_normalize(result_json['towerDeaths'])
-            df_tower_deaths.insert(0, 'match_id', result_json['id'])
-            snapshots = []
-            tower_updates = []
-            outpost_updates = []
-            for i, snapshot in enumerate(result_json['towerStatus']):
-                snapshot_id = f"{result_json['id']}_{i}"
-                snapshots.append({
-                    'snapshot_id': snapshot_id,
-                    'match_id': result_json['id'],
-                    'order_index': i 
-                })
-                for t in snapshot['towers']:
-                    tower_updates.append({
+                # Fetch data
+                variables = {'id': match_id}
+                result = self.query_stratz(query, variables=variables)
+                match_json = result['data']['match']
+                if not match_json: continue
+
+                mid = match_json['id']
+                match_details = {}
+                for key, value in match_json.items():
+                    if type(value) != list:
+                        match_details[key] = value
+                storage['details'].append(match_details)
+
+                # PickBans (Extend because it's a list)
+                pb = match_json.get('pickBans', [])
+                for entry in pb: 
+                    entry['match_id'] = mid
+                storage['pickbans'].extend(pb)
+                
+                ce = match_json.get('chatEvents', [])
+                for entry in ce:
+                    entry['match_id'] = mid
+                storage['chatEvents'].extend(ce)
+
+                storage['win_rates'].extend([
+                    {
+                        'match_id': mid, 
+                        'minute': minute, 
+                        'win_rate': rate
+                    }
+                    for minute, rate in enumerate(match_json['winRates'])
+                ])
+                storage['predicted_win_rates'].extend([
+                    {
+                        'match_id': mid, 
+                        'minute': minute, 
+                        'win_rate': rate
+                    }
+                    for minute, rate in enumerate(match_json['predictedWinRates'])
+                ])
+                storage['leads'].extend([
+                    {
+                        'match_id': mid,
+                        'minute': minute,
+                        'radiantNetworthLeads': rnwl,
+                        'radiantExperienceLeads': rel,
+                    }
+                    for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetWorthleads'], match_json['radiantExperienceLeads']))
+                ])
+                storage['kills'].extend([
+                    {
+                        'match_id': mid,
+                        'minute': minute,
+                        'radiantKills': rk,
+                        'direKills': dk
+                    }
+                    for minute, (rk, dk) in enumerate(zip(match_json['radiantKills'], match_json['direKills']))
+                ])
+
+                td = match_json.get('towerDeaths', [])
+                for entry in td:
+                    entry('match_id') = mid
+                storage['towerDeaths'].extend(td)
+
+                snapshots = []
+                tower_updates = []
+                outpost_updates = []
+                for index, buildings in enumerate(match_json['towerStatus']):
+                    snapshot_id = str(match_json['id']) + f'_{index}'
+                    snapshots.append(
+                    {
                         'snapshot_id': snapshot_id,
-                        'npc_id': t['npcId'],
-                        'hp': t['hp']
+                        'match_id': match_json['id'],
+                        'order_index': index
                     })
+
+                    towers = buildings['towers']
+                    for entry in towers:
+                        entry['snapshot_id'] = snapshot_id
+                    tower_updates.append(towers)
+
+                    outposts = buildings['outposts']
+                    for entry in outposts:
+                        entry['snapshot_id'] = snapshot_id
+                    outpost_updates.append(outposts)
+                storage['snapshots'].extend(snapshots)
+                storage['towerStatus'].extend(tower_updates)
+                storage['outposts'].extend(outpost_updates)
+
+                # Players & Stats (The big nested loop)
+                for player in match_json.get('players', []):
+                    hid = player['heroId']
                     
-                for o in snapshot['outposts']:
-                    outpost_updates.append({
-                        'snapshot_id': snapshot_id,
-                        'npc_id': o['npcId'],
-                        'is_radiant_controlled': o['isControlledByRadiant'],
-                        'is_radiant_side': o['isRadiantSide']
-                    })
-            df_snapshots = pd.DataFrame(snapshots)
-            df_tower_updates = pd.DataFrame(tower_updates)
-            df_outpost_updates = pd.DataFrame(outpost_updates)
-            df_players = pd.json_normalize(result_json['players'])
-            df_players.insert(0, 'match_id', result_json['id'])
-            og_cols = []
-            stat_cols = []
-            for colname in df_players.columns:
-                if colname.startswith('steamAccount.'):
-                    og_cols.append(colname)
-                    continue
-                if colname.startswith('stats.'):
-                    stat_cols.append(colname)
-            new_cols = [str.replace(colname[13:], '.', '_') for colname in og_cols]
-            col_mapper = {og_col: new_col for og_col, new_col in zip(og_cols, new_cols)}
-            df_players = df_players.rename(col_mapper, axis=1)
-            df_players = df_players.drop(stat_cols, axis=1)
-            df_performance_metrics = pd.DataFrame(columns=performance_metrics_columns)
-            df_death_events = pd.DataFrame(columns=['match_id', 'hero_id', 'time', 'attacker', 'isDieBack'])
-            df_farm = pd.DataFrame(columns=['match_id', 'hero_id', 'source_type', 'id',	'gold'])
-            df_courier_kills = pd.DataFrame(columns=['match_id', 'hero_id', 'time'])
-            df_runes = pd.DataFrame(columns=['match_id', 'hero_id', 'time', 'rune', 'action', 'positionX', 'positionY'])
-            df_wards = pd.DataFrame(columns=[
-                'match_id',
-                'hero_id',
-                'time',
-                'type',
-                'positionX',
-                'positionY'
-            ])
-            df_ward_destructions = pd.DataFrame(columns=[
-                'match_id',
-                'hero_id',
-                'time',
-                'gold',
-                'isWard'
-            ])
-            df_inventory_reports = pd.DataFrame(columns=[
-                'match_id',
-                'hero_id',
-                'minute',
-                'item0_id',
-                'item1_id',
-                'item2_id',
-                'item3_id',
-                'item4_id',
-                'item5_id',
-                'neutral0_id',
-            ])
-            df_purchases = pd.DataFrame(columns=['match_id', 'hero_id', 'time', 'itemId'])
-            df_buffs = pd.DataFrame(columns=[
-                'match_id',
-                'hero_id',
-                'time',
-                'abilityId',
-                'itemId',
-                'stackCount'
-            ])
-            df_imp_per_minute = pd.DataFrame(columns=['match_id', 'hero_id', 'imp_per_minute'])
-            for idx, player in enumerate(result_json['players']):
-                stats = player['stats'] 
+                    # Flatten player basic info
+                    p_info = pd.json_normalize(player).to_dict(orient='records')[0]
+                    p_info['match_id'] = mid
+                    storage['players'].append(p_info)
 
-                df_ir = pd.json_normalize(stats['inventoryReport'])
-                existing_item_cols = [c for c in df_ir.columns if '.itemId' in c]
-                df_ir = df_ir[existing_item_cols].copy()
-                df_ir = df_ir.rename(columns=lambda x: x.replace('.itemId', '_id'))
-                df_ir.insert(0, 'hero_id', player['heroId'])
-                df_ir.insert(0, 'match_id', result_json['id'])
-                df_inventory_reports = pd.concat([df_inventory_reports, df_ir])
-                df_ipm = pd.DataFrame({
-                    'match_id': result_json['id'],
-                    'hero_id': player['heroId'],
-                    'imp_per_minute': stats['impPerMinute']
-                }) 
-                df_imp_per_minute = pd.concat([df_imp_per_minute, df_ipm])
-                df_pm = pd.DataFrame({
-                    'match_id': result_json['id'],
-                    'hero_id': player['heroId'],
-                    'minute': range(len(stats['networthPerMinute'])),
-                    'gold_per_minute': pd.Series(stats['goldPerMinute']),
-                    'networth_per_minute': pd.Series(stats['networthPerMinute']),
-                    'experience_per_minute': pd.Series(stats['experiencePerMinute']),
-                    'tower_damage_per_minute': pd.Series(stats['towerDamagePerMinute']),
-                    'camp_stack': pd.Series(stats['campStack'])
-                })
-                df_performance_metrics = pd.concat([df_performance_metrics, df_pm])
-                df_matchid_heroid = pd.DataFrame({
-                    'match_id': result_json['id'],
-                    'hero_id': player['heroId']
-                }, index=range(len(stats['deathEvents'])))
-                df_de = pd.DataFrame(stats['deathEvents'])
-                df_death_events = pd.concat([df_death_events, pd.concat([df_matchid_heroid, df_de], axis=1)])
-                rows = []
-                for category, content in stats['farmDistributionReport'].items():
-                    if isinstance(content, list):
-                        for entry in content:
-                            # Copy entry so we don't modify the original JSON
-                            row = entry.copy()
-                            row['source_type'] = category
-                            rows.append(row)
-                    elif isinstance(content, dict):
-                        row = content.copy()
-                        row['source_type'] = category
-                        rows.append(row)
-                df_f = pd.DataFrame(rows)
-                df_f.insert(0, 'hero_id', player['heroId'])
-                df_f.insert(0, 'match_id', result_json['id'])
-                df_farm = pd.concat([df_farm, df_f])
-                buff_rows = []
-                for buff in stats['matchPlayerBuffEvent']:
-                    buff_rows.append({
-                        'time': buff['time'],
-                        'item_id': buff['itemId'],
-                        'ability_id': buff['abilityId']
-                    })
-                df_b = pd.DataFrame(buff_rows)
-                df_b.insert(0, 'hero_id', player['heroId'])
-                df_b.insert(0, 'match_id', result_json['id'])
-                df_buffs = pd.concat([df_buffs, df_b])
+                    # Performance Metrics (Time series data)
+                    stats = player.get('stats', {})
+                    if 'networthPerMinute' in stats:
+                        for minute, nw in enumerate(stats['networthPerMinute']):
+                            storage['performance'].append({
+                                'match_id': mid, 'hero_id': hid, 'minute': minute,
+                                'networth': nw, 
+                                'gpm': stats['goldPerMinute'][minute] if minute < len(stats['goldPerMinute']) else None
+                            })
 
-                df_p = pd.DataFrame(stats['itemPurchases'])
-                df_p.insert(0, 'hero_id', player['heroId'])
-                df_p.insert(0, 'match_id', result_json['id'])
-                df_purchases = pd.concat([df_purchases, df_p])
-                df_c = pd.DataFrame(stats['courierKills'])
-                df_c.insert(0, 'hero_id', player['heroId'])
-                df_c.insert(0, 'match_id', result_json['id'])
-                df_courier_kills = pd.concat([df_courier_kills, df_c])
-                df_r = pd.DataFrame(stats['runes'])
-                df_r.insert(0, 'hero_id', player['heroId'])
-                df_r.insert(0, 'match_id', result_json['id'])
-                df_runes = pd.concat([df_runes, df_r])
-                df_w = pd.DataFrame(stats['wards'])
-                df_w.insert(0, 'hero_id', player['heroId'])
-                df_w.insert(0, 'match_id', result_json['id'])
-                df_wards = pd.concat([df_wards, df_w])
-                df_wd = pd.DataFrame(stats['wardDestruction'])
-                df_wd.insert(0, 'hero_id', player['heroId'])
-                df_wd.insert(0, 'match_id', result_json['id'])
-                df_ward_destructions = pd.concat([df_ward_destructions, df_wd])
-            df_death_events = df_death_events.reset_index().drop(['index'], axis=1)
-            first_layer_dfs = [
-                df_match_details,
-                df_pickbans,
-                df_chatevents,
-                df_predicted_win_rates,
-                df_win_rates,
-                df_kills,
-                df_leads,
-                df_tower_deaths,
-                df_snapshots,
-                df_tower_updates,
-                df_outpost_updates,
-                df_players
-            ]
-            second_layer_dfs = [
-                df_performance_metrics, 
-                df_death_events,
-                df_inventory_reports,
-                df_imp_per_minute,
-                df_farm,
-                df_buffs,
-                df_purchases,
-                df_courier_kills,
-                df_runes,
-                df_wards,
-                df_ward_destructions
-            ]
-            if match_id == match_ids[0]:
-                ## If it's the first result, create the tables
-                self.create_table_from_df(df_match_details, 'match_details', conn_str=conn_str)
-                self.create_table_from_df(df_pickbans, 'match_pick_bans', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_chatevents, 'match_chat_events', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_predicted_win_rates, 'match_predicted_win_rates', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_win_rates, 'match_win_rates', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_kills, 'match_kills', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_leads, 'match_leads', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_tower_deaths, 'match_tower_deaths', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_snapshots, 'match_snapshots', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_tower_updates, 'match_tower_updates', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_outpost_updates, 'match_outpost_updates', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_players, 'match_players', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_performance_metrics, 'match_performance_metrics', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_death_events, 'match_death_events', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_inventory_reports, 'match_inventory_reports', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_imp_per_minute, 'match_imp_per_minute', conn_str=conn_str, add_serial_id=True)
-                df_farm.insert(0, 'farm_id', range(len(df_farm)))
-                self.create_table_from_df(df_farm, 'match_farm', conn_str=conn_str)
-                df_farm.drop('farm_id', axis=1, inplace=True)
-                self.create_table_from_df(df_buffs, 'match_buffs', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_purchases, 'match_purchases', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_courier_kills, 'match_courier_kills', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_runes, 'match_runes', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_wards, 'match_wards', conn_str=conn_str, add_serial_id=True)
-                self.create_table_from_df(df_ward_destructions, 'match_ward_destructions', conn_str=conn_str, add_serial_id=True)
-            self.insert_df_into_table(df_match_details, 'match_details', conn_str=conn_str)
-            self.insert_df_into_table(df_pickbans, 'match_pick_bans', conn_str=conn_str)
-            self.insert_df_into_table(df_chatevents, 'match_chat_events', conn_str=conn_str)
-            self.insert_df_into_table(df_predicted_win_rates, 'match_predicted_win_rates', conn_str=conn_str)
-            self.insert_df_into_table(df_win_rates, 'match_win_rates', conn_str=conn_str)
-            self.insert_df_into_table(df_kills, 'match_kills', conn_str=conn_str)
-            self.insert_df_into_table(df_leads, 'match_leads', conn_str=conn_str)
-            self.insert_df_into_table(df_tower_deaths, 'match_tower_deaths', conn_str=conn_str)
-            self.insert_df_into_table(df_snapshots, 'match_snapshots', conn_str=conn_str)
-            self.insert_df_into_table(df_tower_updates, 'match_tower_updates', conn_str=conn_str)
-            self.insert_df_into_table(df_outpost_updates, 'match_outpost_updates', conn_str=conn_str)
-            self.insert_df_into_table(df_players, 'match_players', conn_str=conn_str)
-            self.insert_df_into_table(df_performance_metrics, 'match_performance_metrics', conn_str=conn_str)
-            self.insert_df_into_table(df_death_events, 'match_death_events', conn_str=conn_str)
-            self.insert_df_into_table(df_inventory_reports, 'match_inventory_reports', conn_str=conn_str)
-            self.insert_df_into_table(df_imp_per_minute, 'match_imp_per_minute', conn_str=conn_str)
-            self.insert_df_into_table(df_farm, 'match_farm', conn_str=conn_str)
-            self.insert_df_into_table(df_buffs, 'match_buffs', conn_str=conn_str)
-            self.insert_df_into_table(df_purchases, 'match_purchases', conn_str=conn_str)
-            self.insert_df_into_table(df_courier_kills, 'match_courier_kills', conn_str=conn_str)
-            self.insert_df_into_table(df_runes, 'match_runes', conn_str=conn_str)
-            self.insert_df_into_table(df_wards, 'match_wards', conn_str=conn_str)
-            self.insert_df_into_table(df_ward_destructions, 'match_ward_destructions', conn_str=conn_str)
-            elapsed = time.time() - start_time
-            if elapsed < 2.0:
-                time.sleep(2.0-elapsed)
+                # --- END PARSING ---
+
+            except Exception as e:
+                logging.error(f"Error on match {match_id}: {e}")
+                continue
+
+            # Rate limiting: Stratz is strict
+            time.sleep(1.0) 
+
+        # 3. Final Bulk Insertion (Outside the loop!)
+        for key, data_list in storage.items():
+            if not data_list: continue
+            
+            df = pd.DataFrame(data_list)
+            table_name = table_map[key]
+            
+            # Create table if first run, then COPY
+            # Use your COPY-based method here for speed
+            self.insert_df_into_table(df, table_name)
+            logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
 
 def get_pg_type(pandas_type):
     if pd.api.types.is_integer_dtype(pandas_type):

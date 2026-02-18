@@ -124,4 +124,33 @@ SELECT * FROM league_details ld WHERE ld."displayName" LIKE 'FISSURE%' AND ld."d
 
 SELECT * FROM league_details ld WHERE ld."displayName" LIKE '%Clavision%' AND ld."prizePool" <> 0;
 
+SELECT * FROM match_details md INNER JOIN league_details ld ON md."leagueId" = ld.id WHERE ld."displayName" LIKE '%Clavision%'; 
+
 SELECT * FROM patches;
+
+SELECT * FROM match_predicted_win_rates;
+
+ALTER TABLE match_kills ADD COLUMN minute SMALLINT;
+
+SELECT ms.*, mtu.*, mo.* FROM match_snapshots ms 
+INNER JOIN match_tower_updates mtu
+ON ms.snapshot_id = mtu.snapshot_id
+INNER JOIN match_outpost_updates mo 
+ON ms.snapshot_id = mo.snapshot_id
+WHERE ms.match_id = 8183642521;
+
+SELECT * FROM match_details WHERE id = 8183642521; 
+
+SELECT mtu.* FROM match_tower_updates mtu 
+INNER JOIN match_snapshots
+ON match_snapshots.snapshot_id = mtu.snapshot_id
+WHERE match_snapshots.match_id = 8183642521;
+
+SELECT mou.* FROM match_outpost_updates mou 
+INNER JOIN match_snapshots
+ON match_snapshots.snapshot_id = mou.snapshot_id
+WHERE match_snapshots.match_id = 8183642521;
+
+SELECT * FROM match_snapshots WHERE match_id = 8183642521;
+
+SELECT * FROM match_outpost_updates;
