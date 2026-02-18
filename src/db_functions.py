@@ -371,14 +371,12 @@ def query_match(conn_str, headers, api_url, match_ids):
         'tower_damage_per_minute',
         'camp_stack'
     ]
-    for match_id in match_ids:
+    for iteration, match_id in enumerate(match_ids):
+        print(f'Currently processing iteration {iteration}')
         start_time = time.time()
         variables = {'id': match_id}
         result = query_stratz(query, headers=headers, api_url=api_url, variables=variables)
         result_json = result['data']['match']
-        #TODO: find first blood team by looking for chat event type 5
-        #TODO: both hero IDs present: tip
-        #TODO: find out what is roshan kills etc. from an actual replay
         filtered_match_details = {k: result_json[k] for k in cols_to_include}
         df_match_details = pd.DataFrame([filtered_match_details])
         df_pickbans = pd.DataFrame(result_json['pickBans'])

@@ -1,5 +1,6 @@
 -- Active: 1765906160049@@localhost@5432@dota
 SELECT * FROM matches;
+
 SELECT COUNT(*) FROM matches;
 SELECT COUNT(tier), tier FROM leagues GROUP BY tier;
 SELECT * FROM leagues WHERE tier = 'premium';
@@ -47,6 +48,7 @@ SELECT COUNT(start_date) FROM matches WHERE start_date >= '2025-02-21 00:00:00';
 SELECT * FROM match_players;
 
 SELECT roles FROM heroes;
+
 
 SELECT * FROM patches;
 
@@ -112,3 +114,12 @@ SELECT * FROM match_details;
 SELECT DISTINCT md."radiantTeamId" FROM match_details md;
 
 SELECT DISTINCT md."direTeamId" FROM match_details md;
+
+SELECT * FROM league_details ld WHERE ld."displayName" LIKE 'ESL%' AND ld."prizePool" <> 0;
+SELECT * FROM league_details ld WHERE ld."displayName" LIKE '%DreamLeague%' AND ld."prizePool" <> 0;
+
+SELECT * FROM league_details ld WHERE ld."displayName" LIKE '%International%' AND ld."prizePool" <> 0;
+
+SELECT * FROM league_details ld WHERE ld."displayName" LIKE 'FISSURE%' AND ld."displayName" NOT LIKE '%Special' AND ld."prizePool" <> 0;
+
+SELECT * FROM league_details ld WHERE ld."displayName" LIKE '%Clavision%' AND ld."prizePool" <> 0;
