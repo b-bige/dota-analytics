@@ -48,8 +48,8 @@ def main():
         logging.error(f"Weekly hero_stats fetching failed: {str(e)}", exc_info=True)
 
 @sleep_and_retry
-@limits(calls=20, period=1)
-@limits(calls=250, period=60)
+@limits(calls=30, period=1)
+@limits(calls=300, period=60)
 def make_request(db, query, variables):
     return db.query_stratz(query, variables)
 
