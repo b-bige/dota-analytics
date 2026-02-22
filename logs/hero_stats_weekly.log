@@ -538,3 +538,34 @@ TypeError: 'builtin_function_or_method' object is not subscriptable
 2026-02-18 14:56:47,901 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
 2026-02-18 14:56:48,424 | INFO | Successfully inserted lane outcome data
 2026-02-18 14:56:48,429 | INFO | Successfully inserted all data.
+2026-02-18 15:34:18,596 | INFO | Processing 8400889142 (1/1)
+2026-02-18 15:34:19,102 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 15:34:20,427 | INFO | Bulk inserted 1 rows into match_details
+2026-02-18 15:34:20,629 | INFO | Bulk inserted 24 rows into match_pick_bans
+2026-02-18 15:34:20,787 | INFO | Bulk inserted 10 rows into match_players
+2026-02-18 15:34:20,990 | INFO | Bulk inserted 370 rows into match_performance_metrics
+2026-02-18 15:35:40,684 | INFO | Processing 8400889142 (1/1)
+2026-02-18 15:35:41,238 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 15:35:42,662 | INFO | Bulk inserted 1 rows into match_details
+2026-02-18 15:35:42,860 | INFO | Bulk inserted 24 rows into match_pick_bans
+2026-02-18 15:35:43,022 | INFO | Bulk inserted 10 rows into match_players
+2026-02-18 15:35:43,186 | INFO | Bulk inserted 370 rows into match_performance_metrics
+2026-02-18 15:37:53,691 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 17:39:49,224 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 17:40:16,081 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 17:45:10,352 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 17:45:20,863 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 17:45:25,070 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-18 18:41:34,837 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-20 10:27:12,730 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-22 16:09:31,631 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-22 16:23:22,728 | INFO | Processing 8183642521 (1/1)
+2026-02-22 16:23:23,329 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-22 16:23:23,498 | ERROR | Error on match 8183642521: 'pickbans'
+2026-02-22 16:23:23,716 | INFO | Bulk inserted 1 rows into match_details
+2026-02-22 16:29:56,297 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-22 16:30:00,329 | INFO | Processing 8461476910 (1/1)
+2026-02-22 16:30:00,870 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"
+2026-02-22 16:30:01,039 | ERROR | Error on match 8461476910: 'pickbans'
+2026-02-22 16:30:01,227 | INFO | Bulk inserted 1 rows into match_details
+2026-02-22 17:11:12,231 | INFO | HTTP Request: POST https://api.stratz.com/graphql "HTTP/1.1 200 OK"

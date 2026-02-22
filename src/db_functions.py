@@ -76,7 +76,7 @@ class DotaDB:
                         cols.append(f'"{col_name}" {pg_type} PRIMARY KEY')
                         primary_key_assigned = True
                     else:
-                        pg_type = get_pg_type(dtype)
+                        pg_type = self.get_pg_type(dtype)
                         # Wrap column names in quotes to handle spaces or reserved words
                         cols.append(f'"{col_name}" {pg_type}')
                 for col_name in jsonb_cols:
@@ -338,8 +338,8 @@ class DotaDB:
         table_map = {
             'details': 'match_details', 'pickBans': 'match_pick_bans', 'chatEvents': 'match_chat_events',
             'predictedWinRates': 'match_predicted_win_rates', 'winRates': 'match_win_rates', 
-            'leads': 'match_leads', 'towerDeaths': 'match_tower_deaths', 'towerStatus': 'match_tower_updates', 
-            'snapshots': 'match_snapshots', 'outposts': 'match_outposts', 'players': 'match_players', 
+            'leads': 'match_leads', 'kills': 'match_kills', 'towerDeaths': 'match_tower_deaths', 'towerStatus': 'match_tower_updates', 
+            'snapshots': 'match_snapshots', 'outposts': 'match_outpost_updates', 'players': 'match_players', 
             'impPerMinute': 'match_imp_per_minute', 'performanceMetrics': 'match_performance_metrics', 
             'deathEvents': 'match_death_events', 'farmDistributionReport': 'match_farm', 
             'itemPurchases': 'match_purchases', 'courierKills': 'match_courier_kills', 'runes': 'match_runes',
@@ -370,26 +370,26 @@ class DotaDB:
                 pb = match_json.get('pickBans', [])
                 for entry in pb: 
                     entry['match_id'] = mid
-                storage['pickbans'].extend(pb)
+                storage['pickBans'].extend(pb)
                 
                 ce = match_json.get('chatEvents', [])
                 for entry in ce:
                     entry['match_id'] = mid
                 storage['chatEvents'].extend(ce)
 
-                storage['win_rates'].extend([
+                storage['winRates'].extend([
                     {
                         'match_id': mid, 
                         'minute': minute, 
-                        'win_rate': rate
+                        'win_rates': rate
                     }
                     for minute, rate in enumerate(match_json['winRates'])
                 ])
-                storage['predicted_win_rates'].extend([
+                storage['predictedWinRates'].extend([
                     {
                         'match_id': mid, 
                         'minute': minute, 
-                        'win_rate': rate
+                        'predicted_win_rate': rate
                     }
                     for minute, rate in enumerate(match_json['predictedWinRates'])
                 ])
@@ -400,7 +400,7 @@ class DotaDB:
                         'radiantNetworthLeads': rnwl,
                         'radiantExperienceLeads': rel,
                     }
-                    for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetWorthleads'], match_json['radiantExperienceLeads']))
+                    for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetworthLeads'], match_json['radiantExperienceLeads']))
                 ])
                 storage['kills'].extend([
                     {
@@ -414,7 +414,7 @@ class DotaDB:
 
                 td = match_json.get('towerDeaths', [])
                 for entry in td:
-                    entry('match_id') = mid
+                    entry['match_id'] = mid
                 storage['towerDeaths'].extend(td)
 
                 snapshots = []
@@ -429,68 +429,134 @@ class DotaDB:
                         'order_index': index
                     })
 
-                    towers = buildings['towers']
+                    towers = buildings['towers'] ##TODO: also filter this maybe?
                     for entry in towers:
                         entry['snapshot_id'] = snapshot_id
-                    tower_updates.append(towers)
+                    tower_updates.extend(towers)
 
-                    outposts = buildings['outposts']
+                    outposts = buildings['outposts'] ##TODO: This is often empty, might want to filter?
                     for entry in outposts:
                         entry['snapshot_id'] = snapshot_id
-                    outpost_updates.append(outposts)
+                    outpost_updates.extend(outposts)
                 storage['snapshots'].extend(snapshots)
                 storage['towerStatus'].extend(tower_updates)
                 storage['outposts'].extend(outpost_updates)
-
-                # Players & Stats (The big nested loop)
-                for player in match_json.get('players', []):
-                    hid = player['heroId']
-                    
-                    # Flatten player basic info
-                    p_info = pd.json_normalize(player).to_dict(orient='records')[0]
-                    p_info['match_id'] = mid
-                    storage['players'].append(p_info)
-
-                    # Performance Metrics (Time series data)
-                    stats = player.get('stats', {})
-                    if 'networthPerMinute' in stats:
-                        for minute, nw in enumerate(stats['networthPerMinute']):
-                            storage['performance'].append({
-                                'match_id': mid, 'hero_id': hid, 'minute': minute,
-                                'networth': nw, 
-                                'gpm': stats['goldPerMinute'][minute] if minute < len(stats['goldPerMinute']) else None
+                match_players = []
+                for idx, player in enumerate(match_json['players']):
+                    match_players.append({'match_id': mid})
+                    for key, value in player.items():
+                        if type(value) != dict:
+                            match_players[idx][key] = value
+                        elif key == 'steamAccount':
+                            for sa_key, sa_value in value.items():
+                                if sa_key == 'proSteamAccount':
+                                    match_players[idx]['proSteamAccount_teamId'] = sa_value['teamId']
+                                    match_players[idx]['proSteamAccount_name'] = sa_value['name']
+                                else:
+                                    match_players[idx][sa_key] = sa_value
+                for idx, player in enumerate(match_json['players']):
+                    hero_id = player['heroId']
+                    player_row = {'match_id': mid}
+                    stats = player['stats']
+                    for key, value in player.items():
+                        if key == 'stats':
+                            continue
+                        if key == 'steamAccount' and isinstance(value, dict):
+                            for sa_key, sa_value in value.items():
+                                if sa_key == 'proSteamAccount' and isinstance(sa_value, dict):
+                                    player_row['proSteamAccount_teamId'] = sa_value['teamId']
+                                    player_row['proSteamAccount_name'] = sa_value['name']
+                        else:
+                            player_row[key] = value
+                        storage['players'].append(player_row)
+                    storage['impPerMinute'].extend([
+                        {
+                            'match_id': mid,
+                            'hero_id': hero_id,
+                            'minute': minute,
+                            'imp_per_minute': imp
+                        }
+                        for minute, imp in enumerate(stats['impPerMinute']) 
+                    ])
+                    storage['performanceMetrics'].extend([
+                        {
+                            'match_id': mid,
+                            'hero_id': hero_id,
+                            'minute': minute,
+                            'gold_per_minute': gpm,
+                            'networth_per_minute': nwpm,
+                            'experience_per_minute': exp,
+                            'tower_damage_per_minute': tdpm,
+                            'camp_stack': camp_stack
+                        }
+                        for minute, (gpm, nwpm, exp, tdpm, camp_stack) in enumerate(zip(
+                            stats['goldPerMinute'], stats['networthPerMinute'], 
+                            stats['experiencePerMinute'], stats['towerDamagePerMinute'],
+                            stats['campStack']
+                        ))
+                    ])
+                    for source_type, value in stats['farmDistributionReport'].items():
+                        if source_type != 'buyBackGold':
+                            items = [value] if isinstance(value, dict) else value
+                            storage['farmDistributionReport'].extend([
+                                {
+                                    'match_id': mid,
+                                    'hero_id': hero_id,
+                                    'source_type': source_type, 
+                                    'id': v['id'],
+                                    'gold': v['gold']
+                                }
+                                for v in items
+                            ])
+                        else:
+                            storage['farmDistributionReport'].append({
+                                'match_id': mid,
+                                'hero_id': hero_id,
+                                'source_type': source_type, 
+                                'id': -1,
+                                'gold': value
                             })
-
-                # --- END PARSING ---
-
+                    for hero_stat in ['deathEvents', 'itemPurchases', 'courierKills', 'runes', 'wards', 'wardDestruction']:
+                        hs = stats[hero_stat]
+                        for entry in hs:
+                            entry['match_id'] = mid
+                            entry['hero_id'] = hero_id
+                        storage[hero_stat].extend(hs)
             except Exception as e:
-                logging.error(f"Error on match {match_id}: {e}")
+                logging.error(f"Error on match {match_id}")
                 continue
-
-            # Rate limiting: Stratz is strict
             time.sleep(1.0) 
-
-        # 3. Final Bulk Insertion (Outside the loop!)
         for key, data_list in storage.items():
             if not data_list: continue
             
             df = pd.DataFrame(data_list)
+            match key:
+                case 'leads': 
+                    df = df.rename({'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'}, axis=1)
+                case 'kills':
+                    df = df.rename({'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'}, axis=1)
+                case 'towerStatus':
+                    df = df.rename({'npcId': 'npc_id'}, axis=1)
+                case 'outposts':
+                    df = df.rename({
+                        'npcId': 'npc_id',
+                        'isControlledByRadiant': 'is_radiant_controlled', 
+                        'isRadiantSide': 'is_radiant_side'
+                    }, axis=1)
             table_name = table_map[key]
-            
-            # Create table if first run, then COPY
-            # Use your COPY-based method here for speed
             self.insert_df_into_table(df, table_name)
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
 
-def get_pg_type(pandas_type):
-    if pd.api.types.is_integer_dtype(pandas_type):
-        return "BIGINT" 
-    elif pd.api.types.is_float_dtype(pandas_type):
-        return "DOUBLE PRECISION"
-    elif pd.api.types.is_bool_dtype(pandas_type):
-        return "BOOLEAN"
-    elif pd.api.types.is_datetime64_any_dtype(pandas_type):
-        return "TIMESTAMP"
-    else:
-        return "TEXT"
+    def get_pg_type(pandas_type):
+        if pd.api.types.is_integer_dtype(pandas_type):
+            return "BIGINT" 
+        elif pd.api.types.is_float_dtype(pandas_type):
+            return "DOUBLE PRECISION"
+        elif pd.api.types.is_bool_dtype(pandas_type):
+            return "BOOLEAN"
+        elif pd.api.types.is_datetime64_any_dtype(pandas_type):
+            return "TIMESTAMP"
+        else:
+            return "TEXT"
+        
     

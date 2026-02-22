@@ -14,7 +14,7 @@ import db_functions as dbf
 
 import logging
 import basic_logger
-logger = basic_logger.initiate_basic_logger()
+basic_logger.setup_logger()
 
 
 

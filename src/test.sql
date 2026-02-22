@@ -1,4 +1,4 @@
--- Active: 1771411304973@@165.22.73.33@5432@dota
+-- Active: 1771411304973@@165.22.73.33@5432@dota@public
 SELECT * FROM matches;
 
 SELECT COUNT(*) FROM matches;
@@ -130,7 +130,7 @@ SELECT * FROM patches;
 
 SELECT * FROM match_predicted_win_rates;
 
-ALTER TABLE match_kills ADD COLUMN minute SMALLINT;
+ALTER TABLE match_imp_per_minute ADD COLUMN minute SMALLINT;
 
 SELECT ms.*, mtu.*, mo.* FROM match_snapshots ms 
 INNER JOIN match_tower_updates mtu
@@ -154,3 +154,9 @@ WHERE match_snapshots.match_id = 8183642521;
 SELECT * FROM match_snapshots WHERE match_id = 8183642521;
 
 SELECT * FROM match_outpost_updates;
+
+SELECT * FROM match_farm WHERE source_type = 'buybackGold';
+
+CREATE DATABASE vejle_parking;
+
+SELECT * FROM match_farm;
