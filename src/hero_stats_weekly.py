@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import psycopg
 from datetime import datetime, timedelta, timezone
+import time
 
 import os
 import sys
@@ -11,12 +12,11 @@ sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
 import db_functions as dbf
+from ratelimit import limits, sleep_and_retry
 
 import logging
 import basic_logger
 basic_logger.setup_logger()
-
-
 
 def main():
     try:
@@ -32,8 +32,11 @@ def main():
                     }
                 }
             }
-        ''' #TODO: replace hard-coded value from database
-        results = db.query_stratz(query, variables={'gameVersionId': patch_id})
+        ''' 
+        try:
+            results = db.query_stratz(query, variables={'gameVersionId': patch_id})
+        except Exception as e:
+            logging.error(f"Game versions could not be retrieved from API: {e}")
         hero_ids = [res['id'] for res in results['data']['constants']['heroes']]
         week = get_latest_week_timestamp()
         fetch_insert_hero_stats(db, hero_ids, week)
@@ -43,6 +46,12 @@ def main():
         logging.info(f"Successfully inserted all data.")
     except Exception as e:
         logging.error(f"Weekly hero_stats fetching failed: {str(e)}", exc_info=True)
+
+@sleep_and_retry
+@limits(calls=20, period=1)
+@limits(calls=250, period=60)
+def make_request(db, query, variables):
+    return db.query_stratz(query, variables)
 
 def get_latest_week_timestamp(): #This gets the latest sunday midnight in UTC that Stratz understands
     now = datetime.now(timezone.utc)
@@ -86,7 +95,10 @@ def fetch_insert_hero_stats(db: dbf.DotaDB, hero_ids, week):
         }
     '''
     variables = {'heroIds': hero_ids, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
-    hero_stats = db.query_stratz(query, variables=variables)['data']['heroStats']['stats']
+    try:
+        hero_stats = make_request(db, query, variables)['data']['heroStats']['stats']
+    except Exception as e:
+        logging.error(f"Hero stats could not be retrieved from API: {e}")
     df = pd.DataFrame(hero_stats)
     db.insert_df_into_table(df, 'hero_stats')
     logging.info("Successfully inserted hero statistics data")
@@ -139,7 +151,10 @@ def fetch_insert_matchup_start(db: dbf.DotaDB, hero_ids, week):
     }
     '''
     variables = {'heroIds': hero_ids, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
-    matchups = db.query_stratz(query, variables)['data']['heroStats']['matchUp']
+    try:
+        matchups = make_request(db, query, variables)['data']['heroStats']['matchUp']
+    except Exception as e:
+        logging.error(f'Matchups could not be retrieved from API: {e}')
     all_matchups = []
     all_with = []
     all_vs = []
@@ -235,21 +250,19 @@ def fetch_insert_itp_talent_ability_minmax(db: dbf.DotaDB, hero_ids, week):
     for hero_id in hero_ids:
         variables = {'heroId': hero_id, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
         try:
-            results = db.query_stratz(query, variables=variables)['data']['heroStats']
+            results = make_request(db, query, variables)['data']['heroStats']
             for key in stat_keys:
                     if results.get(key):
                         data_accumulator[key].extend(results[key])
         except Exception as e:
             logging.error(f"Failed to fetch hero {hero_id} for week {week}: {e}")
+        time.sleep(0.06)
     for key, data_list in data_accumulator.items():
         if not data_list:
             continue
             
         df = pd.DataFrame(data_list)
         table_name = table_mapping[key]
-
-        # High-performance insert
-        # Ensure you drop 'id' if the API happens to return one
         if 'id' in df.columns:
             df = df.drop(columns=['id'])
             
@@ -282,8 +295,12 @@ def fetch_insert_lane_outcome(db: dbf.DotaDB, hero_ids, week):
     for is_with in [True, False]:
         for hero_id in hero_ids:
             variables = {'heroId': hero_id, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL', 'isWith': is_with}
-            results = db.query_stratz(query, variables)['data']['heroStats']['laneOutcome']
+            try:
+                results = make_request(db, query, variables)['data']['heroStats']['laneOutcome']
+            except Exception as e:
+                logging.error(f"Lane outcome could not be retrieved from API: {e}")
             lane_outcome_data.extend(results)
+            time.sleep(0.06)
     df_lane_outcome = pd.DataFrame(lane_outcome_data)
     db.insert_df_into_table(df_lane_outcome, 'matchup_lane_outcome')
     logging.info("Successfully inserted lane outcome data")
