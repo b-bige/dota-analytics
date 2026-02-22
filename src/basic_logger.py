@@ -22,7 +22,7 @@ def setup_logger():
         maxBytes=5*1024*1024, 
         backupCount=10
     )
-    file_handler.setLevel(logging.ERROR)
+    file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
     # 4. Add both to the root
