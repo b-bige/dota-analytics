@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-import db_functions as dbf
+from dota_data_manager import DotaDataManager
+from db_functions import DotaDB
 from ratelimit import limits, sleep_and_retry
 
 import logging
@@ -18,18 +19,9 @@ import basic_logger
 basic_logger.setup_logger()
 
 def main():
-    db = dbf.DotaDB()
-    queries = [
-        'SELECT id FROM league_details ld WHERE ld."displayName" LIKE \'ESL%\' AND ld."prizePool" <> 0;',
-        'SELECT id FROM league_details ld WHERE ld."displayName" LIKE \'%DreamLeague%\' AND ld."prizePool" <> 0;',
-        'SELECT id FROM league_details ld WHERE ld."displayName" LIKE \'%International%\' AND ld."prizePool" <> 0;',
-        'SELECT id FROM league_details ld WHERE ld."displayName" LIKE \'FISSURE%\' AND ld."displayName" NOT LIKE \'%Special\' AND ld."prizePool" <> 0;',
-        'SELECT id FROM league_details ld WHERE ld."displayName" LIKE \'%Clavision%\' AND ld."prizePool" <> 0;'
-    ]
-    league_ids = []
-    for query in queries:
-        for lid in [res[0] for res in db.query_select(query)]:
-            league_ids.append(lid)
+    db = DotaDB()
+    dota_data = DotaDataManager(db)
+    main_league_ids = dota_data.main_leagues
     #TODO: add a check so we only check the matches after the latest match date in database
     query = ''' 
         query($id: Int!, $request: LeagueMatchesRequestType!) {
@@ -42,7 +34,7 @@ def main():
         }
     '''
     match_ids = []
-    for league_id in league_ids:
+    for league_id in main_league_ids:
         skip_counter = 0
         while True:
             results = db.query_stratz(
