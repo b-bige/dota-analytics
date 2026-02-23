@@ -133,7 +133,12 @@ class DotaDB:
 
     @retry(
         wait=wait_exponential(multiplier=30, min=30, max=500),
-        retry=retry_if_exception_type((KeyError, httpx.HTTPError)),
+        retry=retry_if_exception_type((
+            KeyError,
+            httpx.HTTPError,
+            httpx.ConnectError, 
+            httpx.ConnectTimeout
+        )),
         before_sleep=lambda retry_state: logging.warning(
             f"Retry attempt {retry_state.attempt_number} after error: {retry_state.outcome.exception()}"
         )
@@ -142,18 +147,19 @@ class DotaDB:
     @limits(calls=20, period=1)
     @limits(calls=200, period=60)
     @limits(calls=2000, period=3600)
-    def query_stratz(self, query: str, variables={}):
-        with httpx.Client(headers=self.stratz_headers) as client:
-            response = client.post(
-                url=self.stratz_url,
-                json={'query': query, 'variables': variables}
-            )
-            result = response.json()
-            if "errors" in result:
-                raise Exception(f"GraphQL Error: {result['errors']}")
-            if "data" not in result:
-                raise KeyError(f"No data in result, probably rate limit exceeded: {result}")
-            return result
+    def query_stratz(self, client: httpx.Client, query: str, variables:dict={}):
+        response = client.post(
+            url=self.stratz_url,
+            json={'query': query, 'variables': variables}
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        if "errors" in result:
+            raise Exception(f"GraphQL Error: {result['errors']}")
+        if "data" not in result:
+            raise KeyError(f"No data in result, probably rate limit exceeded: {result}")
+        return result
 
     def query_matches(self, match_ids):
         query = """
@@ -364,209 +370,209 @@ class DotaDB:
 
         # 2. Initialize storage for ALL matches
         storage = {key: [] for key in table_map.keys()}
-
-        for iteration, match_id in enumerate(match_ids):
-            logging.info(f"Processing {match_id} ({iteration+1}/{len(match_ids)})")
-            
-            try:
-                # Fetch data
-                variables = {'id': match_id}
-                match_json = self.query_stratz(query, variables=variables)['data']['match']
-                if not match_json: continue
-
-                mid = match_json['id']
-                match_details = {}
-                for key, value in match_json.items():
-                    if type(value) != list:
-                        match_details[key] = value
-                storage['details'].append(match_details)
-
-                # PickBans (Extend because it's a list)
-                pb = match_json.get('pickBans', [])
-                for entry in pb: 
-                    entry['match_id'] = mid
-                storage['pickBans'].extend(pb)
+        with httpx.Client(headers=self.stratz_headers) as client:
+            for iteration, match_id in enumerate(match_ids):
+                logging.info(f"Processing {match_id} ({iteration+1}/{len(match_ids)})")
                 
-                ce = match_json.get('chatEvents', [])
-                if ce:
-                    for entry in ce:
+                try:
+                    # Fetch data
+                    variables = {'id': match_id}
+                    match_json = self.query_stratz(query, client, variables=variables)['data']['match']
+                    if not match_json: continue
+
+                    mid = match_json['id']
+                    match_details = {}
+                    for key, value in match_json.items():
+                        if type(value) != list:
+                            match_details[key] = value
+                    storage['details'].append(match_details)
+
+                    # PickBans (Extend because it's a list)
+                    pb = match_json.get('pickBans', [])
+                    for entry in pb: 
                         entry['match_id'] = mid
-                    storage['chatEvents'].extend(ce)
-                else:
-                    continue
+                    storage['pickBans'].extend(pb)
+                    
+                    ce = match_json.get('chatEvents', [])
+                    if ce:
+                        for entry in ce:
+                            entry['match_id'] = mid
+                        storage['chatEvents'].extend(ce)
+                    else:
+                        continue
 
-                storage['winRates'].extend([
-                    {
-                        'match_id': mid, 
-                        'minute': minute, 
-                        'win_rates': rate
-                    }
-                    for minute, rate in enumerate(match_json['winRates'])
-                ])
-                storage['predictedWinRates'].extend([
-                    {
-                        'match_id': mid, 
-                        'minute': minute, 
-                        'predicted_win_rate': rate
-                    }
-                    for minute, rate in enumerate(match_json['predictedWinRates'])
-                ])
-                storage['leads'].extend([
-                    {
-                        'match_id': mid,
-                        'minute': minute,
-                        'radiantNetworthLeads': rnwl,
-                        'radiantExperienceLeads': rel,
-                    }
-                    for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetworthLeads'], match_json['radiantExperienceLeads']))
-                ])
-                storage['kills'].extend([
-                    {
-                        'match_id': mid,
-                        'minute': minute,
-                        'radiantKills': rk,
-                        'direKills': dk
-                    }
-                    for minute, (rk, dk) in enumerate(zip(match_json['radiantKills'], match_json['direKills']))
-                ])
-
-                td = match_json.get('towerDeaths', [])
-                for entry in td:
-                    entry['match_id'] = mid
-                storage['towerDeaths'].extend(td)
-
-                snapshots = []
-                tower_updates = []
-                outpost_updates = []
-                for index, buildings in enumerate(match_json['towerStatus']):
-                    snapshot_id = str(match_json['id']) + f'_{index}'
-                    snapshots.append(
-                    {
-                        'snapshot_id': snapshot_id,
-                        'match_id': match_json['id'],
-                        'order_index': index
-                    })
-
-                    towers = buildings['towers'] ##TODO: also filter this maybe?
-                    for entry in towers:
-                        entry['snapshot_id'] = snapshot_id
-                    tower_updates.extend(towers)
-
-                    outposts = buildings['outposts'] ##TODO: This is often empty, might want to filter?
-                    for entry in outposts:
-                        entry['snapshot_id'] = snapshot_id
-                    outpost_updates.extend(outposts)
-                storage['snapshots'].extend(snapshots)
-                storage['towerStatus'].extend(tower_updates)
-                storage['outposts'].extend(outpost_updates)
-                match_players = []
-                for idx, player in enumerate(match_json['players']):
-                    match_players.append({'match_id': mid})
-                    for key, value in player.items():
-                        if type(value) != dict:
-                            match_players[idx][key] = value
-                        elif key == 'steamAccount':
-                            for sa_key, sa_value in value.items():
-                                if sa_key == 'proSteamAccount':
-                                    match_players[idx]['proSteamAccount_teamId'] = sa_value['teamId']
-                                    match_players[idx]['proSteamAccount_name'] = sa_value['name']
-                                else:
-                                    match_players[idx][sa_key] = sa_value
-                for idx, player in enumerate(match_json['players']):
-                    hero_id = player['heroId']
-                    player_row = {'match_id': mid}
-                    stats = player['stats']
-                    for key, value in player.items():
-                        if key == 'stats':
-                            continue
-                        if key == 'steamAccount' and isinstance(value, dict):
-                            for sa_key, sa_value in value.items():
-                                if sa_key == 'proSteamAccount' and isinstance(sa_value, dict):
-                                    player_row['proSteamAccount_teamId'] = sa_value['teamId']
-                                    player_row['proSteamAccount_name'] = sa_value['name']
-                        else:
-                            player_row[key] = value
-                        storage['players'].append(player_row)
-                    storage['impPerMinute'].extend([
+                    storage['winRates'].extend([
+                        {
+                            'match_id': mid, 
+                            'minute': minute, 
+                            'win_rates': rate
+                        }
+                        for minute, rate in enumerate(match_json['winRates'])
+                    ])
+                    storage['predictedWinRates'].extend([
+                        {
+                            'match_id': mid, 
+                            'minute': minute, 
+                            'predicted_win_rate': rate
+                        }
+                        for minute, rate in enumerate(match_json['predictedWinRates'])
+                    ])
+                    storage['leads'].extend([
                         {
                             'match_id': mid,
-                            'hero_id': hero_id,
                             'minute': minute,
-                            'imp_per_minute': imp
+                            'radiantNetworthLeads': rnwl,
+                            'radiantExperienceLeads': rel,
                         }
-                        for minute, imp in enumerate(stats['impPerMinute']) 
+                        for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetworthLeads'], match_json['radiantExperienceLeads']))
                     ])
-                    storage['performanceMetrics'].extend([
+                    storage['kills'].extend([
                         {
                             'match_id': mid,
-                            'hero_id': hero_id,
                             'minute': minute,
-                            'gold_per_minute': gpm,
-                            'networth_per_minute': nwpm,
-                            'experience_per_minute': exp,
-                            'tower_damage_per_minute': tdpm,
-                            'camp_stack': camp_stack
+                            'radiantKills': rk,
+                            'direKills': dk
                         }
-                        for minute, (gpm, nwpm, exp, tdpm, camp_stack) in enumerate(zip(
-                            stats['goldPerMinute'], stats['networthPerMinute'], 
-                            stats['experiencePerMinute'], stats['towerDamagePerMinute'],
-                            stats['campStack']
-                        ))
+                        for minute, (rk, dk) in enumerate(zip(match_json['radiantKills'], match_json['direKills']))
                     ])
-                    for source_type, value in stats['farmDistributionReport'].items():
-                        if source_type != 'buyBackGold':
-                            items = [value] if isinstance(value, dict) else value
-                            storage['farmDistributionReport'].extend([
-                                {
+
+                    td = match_json.get('towerDeaths', [])
+                    for entry in td:
+                        entry['match_id'] = mid
+                    storage['towerDeaths'].extend(td)
+
+                    snapshots = []
+                    tower_updates = []
+                    outpost_updates = []
+                    for index, buildings in enumerate(match_json['towerStatus']):
+                        snapshot_id = str(match_json['id']) + f'_{index}'
+                        snapshots.append(
+                        {
+                            'snapshot_id': snapshot_id,
+                            'match_id': match_json['id'],
+                            'order_index': index
+                        })
+
+                        towers = buildings['towers'] ##TODO: also filter this maybe?
+                        for entry in towers:
+                            entry['snapshot_id'] = snapshot_id
+                        tower_updates.extend(towers)
+
+                        outposts = buildings['outposts'] ##TODO: This is often empty, might want to filter?
+                        for entry in outposts:
+                            entry['snapshot_id'] = snapshot_id
+                        outpost_updates.extend(outposts)
+                    storage['snapshots'].extend(snapshots)
+                    storage['towerStatus'].extend(tower_updates)
+                    storage['outposts'].extend(outpost_updates)
+                    match_players = []
+                    for idx, player in enumerate(match_json['players']):
+                        match_players.append({'match_id': mid})
+                        for key, value in player.items():
+                            if type(value) != dict:
+                                match_players[idx][key] = value
+                            elif key == 'steamAccount':
+                                for sa_key, sa_value in value.items():
+                                    if sa_key == 'proSteamAccount':
+                                        match_players[idx]['proSteamAccount_teamId'] = sa_value['teamId']
+                                        match_players[idx]['proSteamAccount_name'] = sa_value['name']
+                                    else:
+                                        match_players[idx][sa_key] = sa_value
+                    for idx, player in enumerate(match_json['players']):
+                        hero_id = player['heroId']
+                        player_row = {'match_id': mid}
+                        stats = player['stats']
+                        for key, value in player.items():
+                            if key == 'stats':
+                                continue
+                            if key == 'steamAccount' and isinstance(value, dict):
+                                for sa_key, sa_value in value.items():
+                                    if sa_key == 'proSteamAccount' and isinstance(sa_value, dict):
+                                        player_row['proSteamAccount_teamId'] = sa_value['teamId']
+                                        player_row['proSteamAccount_name'] = sa_value['name']
+                            else:
+                                player_row[key] = value
+                            storage['players'].append(player_row)
+                        storage['impPerMinute'].extend([
+                            {
+                                'match_id': mid,
+                                'hero_id': hero_id,
+                                'minute': minute,
+                                'imp_per_minute': imp
+                            }
+                            for minute, imp in enumerate(stats['impPerMinute']) 
+                        ])
+                        storage['performanceMetrics'].extend([
+                            {
+                                'match_id': mid,
+                                'hero_id': hero_id,
+                                'minute': minute,
+                                'gold_per_minute': gpm,
+                                'networth_per_minute': nwpm,
+                                'experience_per_minute': exp,
+                                'tower_damage_per_minute': tdpm,
+                                'camp_stack': camp_stack
+                            }
+                            for minute, (gpm, nwpm, exp, tdpm, camp_stack) in enumerate(zip(
+                                stats['goldPerMinute'], stats['networthPerMinute'], 
+                                stats['experiencePerMinute'], stats['towerDamagePerMinute'],
+                                stats['campStack']
+                            ))
+                        ])
+                        for source_type, value in stats['farmDistributionReport'].items():
+                            if source_type != 'buyBackGold':
+                                items = [value] if isinstance(value, dict) else value
+                                storage['farmDistributionReport'].extend([
+                                    {
+                                        'match_id': mid,
+                                        'hero_id': hero_id,
+                                        'source_type': source_type, 
+                                        'id': v['id'],
+                                        'gold': v['gold']
+                                    }
+                                    for v in items
+                                ])
+                            else:
+                                storage['farmDistributionReport'].append({
                                     'match_id': mid,
                                     'hero_id': hero_id,
                                     'source_type': source_type, 
-                                    'id': v['id'],
-                                    'gold': v['gold']
-                                }
-                                for v in items
-                            ])
-                        else:
-                            storage['farmDistributionReport'].append({
-                                'match_id': mid,
-                                'hero_id': hero_id,
-                                'source_type': source_type, 
-                                'id': -1,
-                                'gold': value
-                            })
-                    for hero_stat in ['deathEvents', 'itemPurchases', 'courierKills', 'runes', 'wards', 'wardDestruction']:
-                        hs = stats[hero_stat]
-                        for entry in hs:
-                            entry['match_id'] = mid
-                            entry['hero_id'] = hero_id
-                        storage[hero_stat].extend(hs)
-            except Exception as e:
-                logging.exception(f"Error on match {match_id}: {e}")
-                continue
-            logging.info(f"Iteration {iteration} with match {match_id} processed successfully")
-        for key, data_list in storage.items():
-            if not data_list: continue
-            
-            df = pd.DataFrame(data_list)
-            match key:
-                case 'leads': 
-                    df = df.rename({'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'}, axis=1)
-                case 'kills':
-                    df = df.rename({'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'}, axis=1)
-                case 'towerStatus':
-                    df = df.rename({'npcId': 'npc_id'}, axis=1)
-                case 'outposts':
-                    df = df.rename({
-                        'npcId': 'npc_id',
-                        'isControlledByRadiant': 'is_radiant_controlled', 
-                        'isRadiantSide': 'is_radiant_side'
-                    }, axis=1)
-            table_name = table_map[key]
-            self.insert_df_into_table(df, table_name)
-            logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
+                                    'id': -1,
+                                    'gold': value
+                                })
+                        for hero_stat in ['deathEvents', 'itemPurchases', 'courierKills', 'runes', 'wards', 'wardDestruction']:
+                            hs = stats[hero_stat]
+                            for entry in hs:
+                                entry['match_id'] = mid
+                                entry['hero_id'] = hero_id
+                            storage[hero_stat].extend(hs)
+                except Exception as e:
+                    logging.exception(f"Error on match {match_id}: {e}")
+                    continue
+                logging.info(f"Iteration {iteration} with match {match_id} processed successfully")
+            for key, data_list in storage.items():
+                if not data_list: continue
+                
+                df = pd.DataFrame(data_list)
+                match key:
+                    case 'leads': 
+                        df = df.rename({'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'}, axis=1)
+                    case 'kills':
+                        df = df.rename({'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'}, axis=1)
+                    case 'towerStatus':
+                        df = df.rename({'npcId': 'npc_id'}, axis=1)
+                    case 'outposts':
+                        df = df.rename({
+                            'npcId': 'npc_id',
+                            'isControlledByRadiant': 'is_radiant_controlled', 
+                            'isRadiantSide': 'is_radiant_side'
+                        }, axis=1)
+                table_name = table_map[key]
+                self.insert_df_into_table(df, table_name)
+                logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
     
     def query_opendota(self, endpoint):
-        response = httpx.get(f'{self.opendota_url}/{endpoint}')
+        response = httpx.get(f'{self.opendota_url}/{endpoint}') #TODO: Implement similar client logic to query_matches
         return response.json()
 
     def get_pg_type(pandas_type):

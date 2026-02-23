@@ -22,28 +22,29 @@ def main():
     try:
         logging.info("Starting weekly hero_stats data fetching...")
         db = dbf.DotaDB()
-        query = 'SELECT id FROM patches ORDER BY id DESC LIMIT 1'
-        patch_id = db.query_select(query)[0][0]
-        query = '''
-            query($gameVersionId: Short) {
-                constants {
-                    heroes(gameVersionId: $gameVersionId) { 
-                        id
+        with httpx.Client(headers=db.stratz_headers) as client:
+            query = 'SELECT id FROM patches ORDER BY id DESC LIMIT 1'
+            patch_id = db.query_select(query)[0][0]
+            query = '''
+                query($gameVersionId: Short) {
+                    constants {
+                        heroes(gameVersionId: $gameVersionId) { 
+                            id
+                        }
                     }
                 }
-            }
-        ''' 
-        try:
-            results = db.query_stratz(query, variables={'gameVersionId': patch_id})
-        except Exception as e:
-            logging.error(f"Game versions could not be retrieved from API: {e}")
-        hero_ids = [res['id'] for res in results['data']['constants']['heroes']]
-        week = get_latest_week_timestamp()
-        fetch_insert_hero_stats(db, hero_ids, week)
-        fetch_insert_matchup_start(db, hero_ids, week)
-        fetch_insert_itp_talent_ability_minmax(db, hero_ids, week)
-        fetch_insert_lane_outcome(db, hero_ids, week)
-        logging.info(f"Successfully inserted all data.")
+            ''' 
+            try:
+                results = db.query_stratz(client, query, variables={'gameVersionId': patch_id})
+            except Exception as e:
+                logging.error(f"Game versions could not be retrieved from API: {e}")
+            hero_ids = [res['id'] for res in results['data']['constants']['heroes']]
+            week = get_latest_week_timestamp()
+            fetch_insert_hero_stats(db, client, hero_ids, week)
+            fetch_insert_matchup_start(db, client, hero_ids, week)
+            fetch_insert_itp_talent_ability_minmax(db, client, hero_ids, week)
+            fetch_insert_lane_outcome(db, client, hero_ids, week)
+            logging.info(f"Successfully inserted all data.")
     except Exception as e:
         logging.error(f"Weekly hero_stats fetching failed: {str(e)}", exc_info=True)
 
@@ -55,7 +56,7 @@ def get_latest_week_timestamp(): #This gets the latest sunday midnight in UTC th
 
     return int(sunday_midnight.timestamp())
 
-def fetch_insert_hero_stats(db: dbf.DotaDB, hero_ids, week):
+def fetch_insert_hero_stats(db: dbf.DotaDB, client, hero_ids, week):
     logging.info(f"Fetching hero stats for {len(hero_ids)} heroes for week {week}")
     query = '''
         query($heroIds: [Short]!, $week: Long, $bracketBasicIds: [RankBracketBasicEnum]) {
@@ -90,14 +91,14 @@ def fetch_insert_hero_stats(db: dbf.DotaDB, hero_ids, week):
     '''
     variables = {'heroIds': hero_ids, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
     try:
-        hero_stats = db.query_stratz(query, variables)['data']['heroStats']['stats']
+        hero_stats = db.query_stratz(client, query, variables)['data']['heroStats']['stats']
     except Exception as e:
         logging.error(f"Hero stats could not be retrieved from API: {e}")
     df = pd.DataFrame(hero_stats)
     db.insert_df_into_table(df, 'hero_stats')
     logging.info("Successfully inserted hero statistics data")
 
-def fetch_insert_matchup_start(db: dbf.DotaDB, hero_ids, week):
+def fetch_insert_matchup_start(db: dbf.DotaDB, client, hero_ids, week):
     logging.info(f"Fetching matchup stats for {len(hero_ids)} heroes for week {week}")
     query = '''
         query($heroIds: [Short]!, $week: Long, $bracketBasicIds: [RankBracketBasicEnum]) {
@@ -146,7 +147,7 @@ def fetch_insert_matchup_start(db: dbf.DotaDB, hero_ids, week):
     '''
     variables = {'heroIds': hero_ids, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
     try:
-        matchups = db.query_stratz(query, variables)['data']['heroStats']['matchUp']
+        matchups = db.query_stratz(client, query, variables)['data']['heroStats']['matchUp']
     except Exception as e:
         logging.error(f'Matchups could not be retrieved from API: {e}')
     all_matchups = []
@@ -174,7 +175,7 @@ def fetch_insert_matchup_start(db: dbf.DotaDB, hero_ids, week):
     db.insert_df_into_table(df_vs_stats, 'matchup_vs')
     logging.info("Successfully inserted matchup statistics data")
 
-def fetch_insert_itp_talent_ability_minmax(db: dbf.DotaDB, hero_ids, week):
+def fetch_insert_itp_talent_ability_minmax(db: dbf.DotaDB, client, hero_ids, week):
     logging.info(f"Fetching item purchase, talent and ability min-max stats for {len(hero_ids)} heroes for week {week}")
     query = '''
         query($heroId: Short!, $week: Long, $bracketBasicIds: [RankBracketBasicEnum]) {
@@ -244,7 +245,7 @@ def fetch_insert_itp_talent_ability_minmax(db: dbf.DotaDB, hero_ids, week):
     for hero_id in hero_ids:
         variables = {'heroId': hero_id, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
         try:
-            results = db.query_stratz(query, variables)['data']['heroStats']
+            results = db.query_stratz(client, query, variables)['data']['heroStats']
             for key in stat_keys:
                     if results.get(key):
                         data_accumulator[key].extend(results[key])
@@ -263,7 +264,7 @@ def fetch_insert_itp_talent_ability_minmax(db: dbf.DotaDB, hero_ids, week):
         db.insert_df_into_table(df, table_name)
     logging.info(f"Successfully inserted item purchase timings, talent and ability min-max statistics data")
 
-def fetch_insert_lane_outcome(db: dbf.DotaDB, hero_ids, week):
+def fetch_insert_lane_outcome(db: dbf.DotaDB, client, hero_ids, week):
     logging.info(f"Fetching lane outcome stats for {len(hero_ids)} heroes for week {week}")
     query = '''
         query($heroId: Short, $week: Long, $bracketBasicIds: [RankBracketBasicEnum], $isWith: Boolean!) {
@@ -290,7 +291,7 @@ def fetch_insert_lane_outcome(db: dbf.DotaDB, hero_ids, week):
         for hero_id in hero_ids:
             variables = {'heroId': hero_id, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL', 'isWith': is_with}
             try:
-                results = db.query_stratz(query, variables)['data']['heroStats']['laneOutcome']
+                results = db.query_stratz(client, query, variables)['data']['heroStats']['laneOutcome']
             except Exception as e:
                 logging.error(f"Lane outcome could not be retrieved from API: {e}")
             lane_outcome_data.extend(results)
