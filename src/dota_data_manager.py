@@ -16,6 +16,7 @@ class DotaDataManager:
     
     def _load_reference_data(self):
         self.main_leagues = self._get_main_leagues(self.db)
+        self.dreamleague_leagues = self._get_dreamleague_leagues(self.db)
 
     def _get_main_leagues(self, db):
         queries = [
@@ -30,3 +31,10 @@ class DotaDataManager:
             for lid in [res[0] for res in db.query_select(query)]:
                 league_ids.append(lid)
         return league_ids
+    
+    def _get_dreamleague_leagues(self, db):
+        leagues = []
+        for league in db.query_opendota(endpoint='leagues'):
+            if 'DreamLeague' in league['name']:
+                leagues.append({'id': league['leagueid'], 'name': league['name']})
+        return leagues

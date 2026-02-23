@@ -20,12 +20,13 @@ class DotaDB:
         dbname = os.getenv("DB_NAME")
         
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
-        self.api_key = os.getenv("API_KEY")
-        self.api_url = 'https://api.stratz.com/graphql'
-        self.headers = {
+        self.stratz_api_key = os.getenv("API_KEY")
+        self.stratz_url = 'https://api.stratz.com/graphql'
+        self.stratz_headers = {
             'User-Agent': 'STRATZ_API',
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self.stratz_api_key}"
         }
+        self.opendota_url = 'https://api.opendota.com/api'
 
     def query_select(self, query, identifiers=None, params=None):
         with psycopg.connect(self.conn_str) as conn:
@@ -142,9 +143,9 @@ class DotaDB:
     @limits(calls=200, period=60)
     @limits(calls=2000, period=3600)
     def query_stratz(self, query: str, variables={}):
-        with httpx.Client(headers=self.headers) as client:
+        with httpx.Client(headers=self.stratz_headers) as client:
             response = client.post(
-                url=self.api_url,
+                url=self.stratz_url,
                 json={'query': query, 'variables': variables}
             )
             result = response.json()
@@ -563,6 +564,10 @@ class DotaDB:
             table_name = table_map[key]
             self.insert_df_into_table(df, table_name)
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
+    
+    def query_opendota(self, endpoint):
+        response = httpx.get(f'{self.opendota_url}/{endpoint}')
+        return response.json()
 
     def get_pg_type(pandas_type):
         if pd.api.types.is_integer_dtype(pandas_type):
