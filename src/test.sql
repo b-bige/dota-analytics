@@ -160,3 +160,7 @@ SELECT * FROM match_farm WHERE source_type = 'buybackGold';
 CREATE DATABASE vejle_parking;
 
 SELECT * FROM match_farm;
+
+SELECT * FROM league_details ld WHERE ld."prizePool" > 50000 ORDER BY ld."startDateTime" ASC;
+
+SELECT md.* FROM match_details md WHERE md."leagueId" in (17795, 17509);

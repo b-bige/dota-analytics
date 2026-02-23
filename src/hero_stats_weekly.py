@@ -47,12 +47,6 @@ def main():
     except Exception as e:
         logging.error(f"Weekly hero_stats fetching failed: {str(e)}", exc_info=True)
 
-@sleep_and_retry
-@limits(calls=30, period=1)
-@limits(calls=300, period=60)
-def make_request(db, query, variables):
-    return db.query_stratz(query, variables)
-
 def get_latest_week_timestamp(): #This gets the latest sunday midnight in UTC that Stratz understands
     now = datetime.now(timezone.utc)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -96,7 +90,7 @@ def fetch_insert_hero_stats(db: dbf.DotaDB, hero_ids, week):
     '''
     variables = {'heroIds': hero_ids, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
     try:
-        hero_stats = make_request(db, query, variables)['data']['heroStats']['stats']
+        hero_stats = db.query_stratz(query, variables)['data']['heroStats']['stats']
     except Exception as e:
         logging.error(f"Hero stats could not be retrieved from API: {e}")
     df = pd.DataFrame(hero_stats)
@@ -152,7 +146,7 @@ def fetch_insert_matchup_start(db: dbf.DotaDB, hero_ids, week):
     '''
     variables = {'heroIds': hero_ids, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
     try:
-        matchups = make_request(db, query, variables)['data']['heroStats']['matchUp']
+        matchups = db.query_stratz(query, variables)['data']['heroStats']['matchUp']
     except Exception as e:
         logging.error(f'Matchups could not be retrieved from API: {e}')
     all_matchups = []
@@ -250,7 +244,7 @@ def fetch_insert_itp_talent_ability_minmax(db: dbf.DotaDB, hero_ids, week):
     for hero_id in hero_ids:
         variables = {'heroId': hero_id, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL'}
         try:
-            results = make_request(db, query, variables)['data']['heroStats']
+            results = db.query_stratz(query, variables)['data']['heroStats']
             for key in stat_keys:
                     if results.get(key):
                         data_accumulator[key].extend(results[key])
@@ -296,7 +290,7 @@ def fetch_insert_lane_outcome(db: dbf.DotaDB, hero_ids, week):
         for hero_id in hero_ids:
             variables = {'heroId': hero_id, 'week': week, 'bracketBasicIds': 'DIVINE_IMMORTAL', 'isWith': is_with}
             try:
-                results = make_request(db, query, variables)['data']['heroStats']['laneOutcome']
+                results = db.query_stratz(query, variables)['data']['heroStats']['laneOutcome']
             except Exception as e:
                 logging.error(f"Lane outcome could not be retrieved from API: {e}")
             lane_outcome_data.extend(results)

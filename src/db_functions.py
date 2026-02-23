@@ -7,6 +7,8 @@ import time
 import os
 from dotenv import load_dotenv
 import logging
+from ratelimit import limits, sleep_and_retry
+from tenacity import retry, wait_exponential, retry_if_exception
 
 class DotaDB:
     def __init__(self):
@@ -127,7 +129,18 @@ class DotaDB:
                 cur.execute(final_query, params)
                 conn.commit()
                 return None
-            
+
+    @retry(
+        wait=wait_exponential(multiplier=30, min=30, max=500),
+        retry=retry_if_exception((KeyError, httpx.HTTPError)),
+        before_sleep=lambda retry_state: logging.warning(
+            f"Retry attempt {retry_state.attempt_number} after error: {retry_state.outcome.exception()}"
+        )
+    )
+    @sleep_and_retry 
+    @limits(calls=30, period=1)
+    @limits(calls=300, period=60)
+    @limits(calls=2100, period=3600)
     def query_stratz(self, query: str, variables={}):
         with httpx.Client(headers=self.headers) as client:
             response = client.post(
@@ -137,6 +150,8 @@ class DotaDB:
             result = response.json()
             if "errors" in result:
                 raise Exception(f"GraphQL Error: {result['errors']}")
+            if "data" not in result:
+                raise KeyError(f"No data in result, probably rate limit exceeded: {result}")
             return result
 
     def query_matches(self, match_ids):
@@ -355,8 +370,7 @@ class DotaDB:
             try:
                 # Fetch data
                 variables = {'id': match_id}
-                result = self.query_stratz(query, variables=variables)
-                match_json = result['data']['match']
+                match_json = self.query_stratz(query, variables=variables)['data']['match']
                 if not match_json: continue
 
                 mid = match_json['id']
@@ -373,9 +387,12 @@ class DotaDB:
                 storage['pickBans'].extend(pb)
                 
                 ce = match_json.get('chatEvents', [])
-                for entry in ce:
-                    entry['match_id'] = mid
-                storage['chatEvents'].extend(ce)
+                if ce:
+                    for entry in ce:
+                        entry['match_id'] = mid
+                    storage['chatEvents'].extend(ce)
+                else:
+                    continue
 
                 storage['winRates'].extend([
                     {
@@ -523,9 +540,9 @@ class DotaDB:
                             entry['hero_id'] = hero_id
                         storage[hero_stat].extend(hs)
             except Exception as e:
-                logging.error(f"Error on match {match_id}")
+                logging.exception(f"Error on match {match_id}: {e}")
                 continue
-            time.sleep(1.0) 
+            logging.info(f"Iteration {iteration} with match {match_id} processed successfully")
         for key, data_list in storage.items():
             if not data_list: continue
             
