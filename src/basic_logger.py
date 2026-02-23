@@ -9,7 +9,7 @@ def setup_logger():
 
     # 1. Setup the Root Logger to catch everything (DEBUG or INFO)
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG) 
+    root_logger.setLevel(logging.INFO) 
 
     # 2. Console Handler: Shows everything INFO and above
     console_handler = logging.StreamHandler()

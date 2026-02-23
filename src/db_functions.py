@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 import logging
 from ratelimit import limits, sleep_and_retry
-from tenacity import retry, wait_exponential, retry_if_exception
+from tenacity import retry, wait_exponential, retry_if_exception_type
 
 class DotaDB:
     def __init__(self):
@@ -132,15 +132,15 @@ class DotaDB:
 
     @retry(
         wait=wait_exponential(multiplier=30, min=30, max=500),
-        retry=retry_if_exception((KeyError, httpx.HTTPError)),
+        retry=retry_if_exception_type((KeyError, httpx.HTTPError)),
         before_sleep=lambda retry_state: logging.warning(
             f"Retry attempt {retry_state.attempt_number} after error: {retry_state.outcome.exception()}"
         )
     )
     @sleep_and_retry 
-    @limits(calls=30, period=1)
-    @limits(calls=300, period=60)
-    @limits(calls=2100, period=3600)
+    @limits(calls=20, period=1)
+    @limits(calls=200, period=60)
+    @limits(calls=2000, period=3600)
     def query_stratz(self, query: str, variables={}):
         with httpx.Client(headers=self.headers) as client:
             response = client.post(
