@@ -16,7 +16,7 @@ from ratelimit import limits, sleep_and_retry
 
 import logging
 import basic_logger
-basic_logger.setup_logger()
+basic_logger.setup_logger('logs/fetch_hero_stats_weekly.log')
 
 def main():
     try:

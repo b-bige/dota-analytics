@@ -2,11 +2,9 @@ import os
 import sys
 sys.path.append(os.path.abspath('./src'))
 
-from db_functions import DotaDB
+from httpx import Client
 
-import logging
-import basic_logger
-basic_logger.setup_logger()
+from db_functions import DotaDB
 
 ## TODO: make it a dataclass
 class DotaDataManager:
@@ -34,7 +32,8 @@ class DotaDataManager:
     
     def _get_dreamleague_leagues(self, db):
         leagues = []
-        for league in db.query_opendota(endpoint='leagues'):
-            if 'DreamLeague' in league['name']:
-                leagues.append({'id': league['leagueid'], 'name': league['name']})
-        return leagues
+        with Client(headers=db.stratz_headers) as client:
+            for league in db.query_opendota(client=client, endpoint='leagues'):
+                if 'DreamLeague' in league['name']:
+                    leagues.append({'id': league['leagueid'], 'name': league['name']})
+            return leagues

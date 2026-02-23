@@ -372,13 +372,16 @@ class DotaDB:
         storage = {key: [] for key in table_map.keys()}
         with httpx.Client(headers=self.stratz_headers) as client:
             for iteration, match_id in enumerate(match_ids):
+                if (iteration == 1): ## After 1000 matches, save and empty memory
+                    self._flush_storage(storage, table_map)
+                    storage = {key: [] for key in table_map.keys()}
                 logging.info(f"Processing {match_id} ({iteration+1}/{len(match_ids)})")
-                
                 try:
                     # Fetch data
                     variables = {'id': match_id}
-                    match_json = self.query_stratz(query, client, variables=variables)['data']['match']
-                    if not match_json: continue
+                    match_json = self.query_stratz(client, query, variables=variables)['data']['match']
+                    if not match_json:
+                        logging.warning(f"There was no match data for match {match_id} ({iteration+1}/{len(match_ids)})")
 
                     mid = match_json['id']
                     match_details = {}
@@ -550,30 +553,43 @@ class DotaDB:
                     logging.exception(f"Error on match {match_id}: {e}")
                     continue
                 logging.info(f"Iteration {iteration} with match {match_id} processed successfully")
-            for key, data_list in storage.items():
-                if not data_list: continue
+            self._flush_storage(storage, table_map)
+
+    def _flush_storage(self, storage, table_map):
+        for key, data_list in storage.items():
+            if not data_list: 
+                continue
                 
-                df = pd.DataFrame(data_list)
-                match key:
-                    case 'leads': 
-                        df = df.rename({'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'}, axis=1)
-                    case 'kills':
-                        df = df.rename({'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'}, axis=1)
-                    case 'towerStatus':
-                        df = df.rename({'npcId': 'npc_id'}, axis=1)
-                    case 'outposts':
-                        df = df.rename({
-                            'npcId': 'npc_id',
-                            'isControlledByRadiant': 'is_radiant_controlled', 
-                            'isRadiantSide': 'is_radiant_side'
-                        }, axis=1)
-                table_name = table_map[key]
-                self.insert_df_into_table(df, table_name)
-                logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
+            df = pd.DataFrame(data_list)
+            
+            # Mapping of keys to their specific column renames
+            renames = {
+                'leads': {'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'},
+                'kills': {'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'},
+                'towerStatus': {'npcId': 'npc_id'},
+                'outposts': {
+                    'npcId': 'npc_id',
+                    'isControlledByRadiant': 'is_radiant_controlled', 
+                    'isRadiantSide': 'is_radiant_side'
+                }
+            }
+            
+            if key in renames:
+                df = df.rename(columns=renames[key])
+            
+            table_name = table_map[key]
+            self.insert_df_into_table(df, table_name)
+            logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
     
-    def query_opendota(self, endpoint):
-        response = httpx.get(f'{self.opendota_url}/{endpoint}') #TODO: Implement similar client logic to query_matches
-        return response.json()
+    def query_opendota(self, client: httpx.Client, endpoint):
+        response = client.get(f'{self.opendota_url}/{endpoint}') #TODO: Implement similar client logic to query_matches
+        try:
+            response.raise_for_status()
+            result = response.json()
+            return result
+        except:
+            logging.error(f"Failed GET request at {self.opendota_url}/{endpoint}")
+            return []
 
     def get_pg_type(pandas_type):
         if pd.api.types.is_integer_dtype(pandas_type):

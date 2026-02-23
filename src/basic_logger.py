@@ -3,7 +3,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
-def setup_logger():
+def setup_logger(logfile_path):
     log_dir = os.path.join(os.getcwd(), 'logs')
     os.makedirs(log_dir, exist_ok=True)
 
@@ -18,7 +18,7 @@ def setup_logger():
 
     # 3. File Handler: ONLY catches ERROR and CRITICAL
     file_handler = RotatingFileHandler(
-        "logs/errors.log", 
+        logfile_path, 
         maxBytes=5*1024*1024, 
         backupCount=10
     )

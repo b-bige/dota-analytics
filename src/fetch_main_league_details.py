@@ -16,42 +16,44 @@ from ratelimit import limits, sleep_and_retry
 
 import logging
 import basic_logger
-basic_logger.setup_logger()
+basic_logger.setup_logger(logfile_path='logs/fetch_main_league_details.logs')
 
 def main():
     db = DotaDB()
     dota_data = DotaDataManager(db)
-    main_league_ids = dota_data.main_leagues
-    #TODO: add a check so we only check the matches after the latest match date in database
-    query = ''' 
-        query($id: Int!, $request: LeagueMatchesRequestType!) {
-            league(id: $id) {
-                matches(request: $request) {
-                    id
-                    startDateTime
+    with httpx.Client(headers=db.stratz_headers) as client:
+        main_league_ids = dota_data.main_leagues
+        #TODO: add a check so we only check the matches after the latest match date in database
+        query = ''' 
+            query($id: Int!, $request: LeagueMatchesRequestType!) {
+                league(id: $id) {
+                    matches(request: $request) {
+                        id
+                        startDateTime
+                    }
                 }
             }
-        }
-    '''
-    match_ids = []
-    for league_id in main_league_ids:
-        skip_counter = 0
-        while True:
-            results = db.query_stratz(
-                query,  
-                variables={
-                    'id': int(league_id), 
-                    'request': {'isParsed': True, 'take':100, 'skip': skip_counter}})
-            results_matches = results['data']['league']['matches']
-            skip_counter += 100
-            if len(results_matches) == 0:
-                break
-            for res in results_matches:
-                match_ids.append(res['id'])
-    current_match_ids = [mid[0] for mid in db.query_select('SELECT id FROM match_details')]
-    for mid in match_ids.copy():
-        if mid in current_match_ids:
-            match_ids.remove(mid)
+        '''
+        match_ids = []
+        for league_id in main_league_ids:
+            skip_counter = 0
+            while True:
+                results = db.query_stratz(
+                    client,
+                    query,  
+                    variables={
+                        'id': int(league_id), 
+                        'request': {'isParsed': True, 'take':100, 'skip': skip_counter}})
+                results_matches = results['data']['league']['matches']
+                skip_counter += 100
+                if len(results_matches) == 0:
+                    break
+                for res in results_matches:
+                    match_ids.append(res['id'])
+        current_match_ids = [mid[0] for mid in db.query_select('SELECT id FROM match_details')]
+        for mid in match_ids.copy():
+            if mid in current_match_ids:
+                match_ids.remove(mid)
 
     db.query_matches(match_ids)
 
