@@ -11,7 +11,7 @@ from ratelimit import limits, sleep_and_retry
 from tenacity import retry, wait_exponential, retry_if_exception_type
 
 class DotaDB:
-    def __init__(self):
+    def __init__(self, schema: str='public'):
         load_dotenv()
         user = os.getenv("DB_USER")
         password = os.getenv("DB_PASSWORD")
@@ -19,7 +19,7 @@ class DotaDB:
         port = os.getenv("DB_PORT")
         dbname = os.getenv("DB_NAME")
         
-        self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+        self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
         self.stratz_api_key = os.getenv("API_KEY")
         self.stratz_url = 'https://api.stratz.com/graphql'
         self.stratz_headers = {
@@ -112,8 +112,7 @@ class DotaDB:
                     with cur.copy(copy_query) as copy:
                         for row in clean_df.itertuples(index=False):
                             copy.write_row(row)
-                    seq_query = f"SELECT setval(pg_get_serial_sequence('\"{table_name}\"', 'id'), max(id)) FROM \"{table_name}\";"
-                    cur.execute(seq_query) #TODO: edit seq_query so it finds the first column with id in lowercase
+
                 conn.commit()
         except Exception as e:
             print(f"Error inserting data into table '{table_name}': {e}")
@@ -591,7 +590,7 @@ class DotaDB:
             logging.error(f"Failed GET request at {self.opendota_url}/{endpoint}")
             return []
 
-    def get_pg_type(pandas_type):
+    def get_pg_type(self, pandas_type):
         if pd.api.types.is_integer_dtype(pandas_type):
             return "BIGINT" 
         elif pd.api.types.is_float_dtype(pandas_type):

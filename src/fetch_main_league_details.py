@@ -16,7 +16,7 @@ from ratelimit import limits, sleep_and_retry
 
 import logging
 import basic_logger
-basic_logger.setup_logger(logfile_path='logs/fetch_main_league_details.logs')
+basic_logger.setup_logger(logfile_path='logs/fetch_main_league_details.log')
 
 def main():
     db = DotaDB()
