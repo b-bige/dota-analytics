@@ -1,18 +1,14 @@
 import httpx
 import pandas as pd
 import numpy as np
-import psycopg
-from datetime import datetime, timedelta, timezone
 
 import os
 import sys
-from dotenv import load_dotenv
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
 from dota_data_manager import DotaDataManager
 from db_functions import DotaDB
-from ratelimit import limits, sleep_and_retry
 
 import logging
 import basic_logger

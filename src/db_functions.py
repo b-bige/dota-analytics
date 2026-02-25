@@ -28,6 +28,14 @@ class DotaDB:
         }
         self.opendota_url = 'https://api.opendota.com/api'
 
+    def set_schema(self, schema: str='public'):
+        user = os.getenv("DB_USER")
+        password = os.getenv("DB_PASSWORD")
+        host = os.getenv("DB_HOST")
+        port = os.getenv("DB_PORT")
+        dbname = os.getenv("DB_NAME")
+        self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
+
     def query_select(self, query, identifiers=None, params=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
@@ -265,10 +273,16 @@ class DotaDB:
                     experiencePerMinute
                     towerDamagePerMinute
                     campStack
+                    locationReport {
+                    positionX
+                    positionY
+                    }
                     deathEvents {
                     time
                     attacker
                     isDieBack
+                    positionX
+                    positionY
                     }
                     farmDistributionReport {
                     creepLocation {
@@ -362,7 +376,7 @@ class DotaDB:
             'leads': 'match_leads', 'kills': 'match_kills', 'towerDeaths': 'match_tower_deaths', 'towerStatus': 'match_tower_updates', 
             'snapshots': 'match_snapshots', 'outposts': 'match_outpost_updates', 'players': 'match_players', 
             'impPerMinute': 'match_imp_per_minute', 'performanceMetrics': 'match_performance_metrics', 
-            'deathEvents': 'match_death_events', 'farmDistributionReport': 'match_farm', 
+            'locationReport': 'match_position', 'deathEvents': 'match_death_events', 'farmDistributionReport': 'match_farm', 
             'itemPurchases': 'match_purchases', 'courierKills': 'match_courier_kills', 'runes': 'match_runes',
             'wards': 'match_wards', 'wardDestruction': 'match_ward_destructions'
         }
@@ -371,7 +385,7 @@ class DotaDB:
         storage = {key: [] for key in table_map.keys()}
         with httpx.Client(headers=self.stratz_headers) as client:
             for iteration, match_id in enumerate(match_ids):
-                if (iteration == 1): ## After 1000 matches, save and empty memory
+                if iteration % 100 == 0: ## After 1000 matches, save and empty memory
                     self._flush_storage(storage, table_map)
                     storage = {key: [] for key in table_map.keys()}
                 logging.info(f"Processing {match_id} ({iteration+1}/{len(match_ids)})")
@@ -385,7 +399,7 @@ class DotaDB:
                     mid = match_json['id']
                     match_details = {}
                     for key, value in match_json.items():
-                        if type(value) != list:
+                        if type(value) != list and value is not None:
                             match_details[key] = value
                     storage['details'].append(match_details)
 
@@ -467,19 +481,6 @@ class DotaDB:
                     storage['snapshots'].extend(snapshots)
                     storage['towerStatus'].extend(tower_updates)
                     storage['outposts'].extend(outpost_updates)
-                    match_players = []
-                    for idx, player in enumerate(match_json['players']):
-                        match_players.append({'match_id': mid})
-                        for key, value in player.items():
-                            if type(value) != dict:
-                                match_players[idx][key] = value
-                            elif key == 'steamAccount':
-                                for sa_key, sa_value in value.items():
-                                    if sa_key == 'proSteamAccount':
-                                        match_players[idx]['proSteamAccount_teamId'] = sa_value['teamId']
-                                        match_players[idx]['proSteamAccount_name'] = sa_value['name']
-                                    else:
-                                        match_players[idx][sa_key] = sa_value
                     for idx, player in enumerate(match_json['players']):
                         hero_id = player['heroId']
                         player_row = {'match_id': mid}
@@ -521,33 +522,51 @@ class DotaDB:
                                 stats['campStack']
                             ))
                         ])
-                        for source_type, value in stats['farmDistributionReport'].items():
-                            if source_type != 'buyBackGold':
-                                items = [value] if isinstance(value, dict) else value
-                                storage['farmDistributionReport'].extend([
-                                    {
+                        if not stats['farmDistributionReport']:
+                            pass
+                        else:
+                            for source_type, value in stats.get('farmDistributionReport', {}).items():
+                                if source_type != 'buyBackGold':
+                                    items = [value] if isinstance(value, dict) else value
+                                    if items:
+                                        storage['farmDistributionReport'].extend([
+                                            {
+                                                'match_id': mid,
+                                                'hero_id': hero_id,
+                                                'source_type': source_type, 
+                                                'id': v['id'],
+                                                'gold': v['gold']
+                                            }
+                                            for v in items
+                                    ])
+                                else:
+                                    storage['farmDistributionReport'].append({
                                         'match_id': mid,
                                         'hero_id': hero_id,
                                         'source_type': source_type, 
-                                        'id': v['id'],
-                                        'gold': v['gold']
-                                    }
-                                    for v in items
-                                ])
-                            else:
-                                storage['farmDistributionReport'].append({
-                                    'match_id': mid,
-                                    'hero_id': hero_id,
-                                    'source_type': source_type, 
-                                    'id': -1,
-                                    'gold': value
-                                })
+                                        'id': -1,
+                                        'gold': value
+                                    })
+                        pos_x = [px['positionX'] for px in stats['locationReport']]
+                        pos_y = [py['positionY'] for py in stats['locationReport']]
+                        storage['locationReport'].extend([
+                            {
+                                'match_id': mid,
+                                'hero_id': hero_id,
+                                'minute': minute,
+                                'position_x': pos_x,
+                                'position_y': pos_y
+                            }
+                            for minute, (pos_x, pos_y) in enumerate(zip(pos_x, pos_y))
+                        ])
                         for hero_stat in ['deathEvents', 'itemPurchases', 'courierKills', 'runes', 'wards', 'wardDestruction']:
                             hs = stats[hero_stat]
-                            for entry in hs:
-                                entry['match_id'] = mid
-                                entry['hero_id'] = hero_id
-                            storage[hero_stat].extend(hs)
+                            if hs:
+                                for entry in hs:
+                                    entry['match_id'] = mid
+                                    entry['hero_id'] = hero_id
+                                storage[hero_stat].extend(hs)
+
                 except Exception as e:
                     logging.exception(f"Error on match {match_id}: {e}")
                     continue
@@ -560,7 +579,12 @@ class DotaDB:
                 continue
                 
             df = pd.DataFrame(data_list)
-            
+            if key == 'details':
+                match_ids = list(df['id'])
+                current_ids = [cid[0] for cid in self.query_select('SELECT id FROM match_details')]
+                for mid in match_ids.copy():
+                    if mid in current_ids:
+                        df = df[df['id'] != mid]
             # Mapping of keys to their specific column renames
             renames = {
                 'leads': {'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'},
@@ -570,7 +594,8 @@ class DotaDB:
                     'npcId': 'npc_id',
                     'isControlledByRadiant': 'is_radiant_controlled', 
                     'isRadiantSide': 'is_radiant_side'
-                }
+                },
+                'deathEvents': {'positionX': 'position_x', 'positionY': 'position_y'},
             }
             
             if key in renames:
