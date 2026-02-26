@@ -23,7 +23,6 @@ def main():
         ORDER BY start_date_time ASC;
     """
     match_ids = [mid[0] for mid in db.query_select(query)]
-    match_ids = match_ids[:5000] + match_ids[-5000:]
     db.set_schema(schema='public')
     query = '''
         SELECT id 
