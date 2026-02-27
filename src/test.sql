@@ -8,3 +8,5 @@ CREATE TABLE match_position (
     position_y INT 
 );
 SELECT COUNT(*) FROM match_details;
+
+SELECT * FROM information_schema.tables WHERE table_schema = 'kaggle';
