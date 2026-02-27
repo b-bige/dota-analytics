@@ -148,12 +148,13 @@ class DotaDB:
         )),
         before_sleep=lambda retry_state: logging.warning(
             f"Retry attempt {retry_state.attempt_number} after error: {retry_state.outcome.exception()}"
-        )
+        ),
     )
     @sleep_and_retry 
     @limits(calls=20, period=1)
     @limits(calls=200, period=60)
     @limits(calls=2000, period=3600)
+    @limits(calls=10000, period=86400)
     def query_stratz(self, client: httpx.Client, query: str, variables:dict={}):
         response = client.post(
             url=self.stratz_url,
