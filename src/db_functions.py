@@ -47,7 +47,7 @@ class DotaDB:
                 cur.execute(final_query, params)
                 return cur.fetchall() if cur.description else None
             
-    def query_select_to_df(self, query, table_name=None, columns=None, identifiers=None, params=None):
+    def query_select_to_df(self, query, columns=None, identifiers=None, params=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -59,12 +59,7 @@ class DotaDB:
                 if cur.description:
                     data = cur.fetchall()
                     if columns: 
-                        colnames = columns
-                    else:
-                        colname_query = 'SELECT column_name FROM information_schema.columns WHERE table_name = %s'
-                        cur.execute(colname_query, params=(table_name, ))
-                        colnames = [colname[0] for colname in cur.fetchall()]
-                    return pd.DataFrame(data, columns=colnames)
+                        return pd.DataFrame(data, columns=columns)
                 return None
             
     def create_table_from_df(self, df, table_name, convert_dtypes=True, add_serial_id=False, jsonb_cols=[]):
@@ -496,7 +491,7 @@ class DotaDB:
                                         player_row['proSteamAccount_name'] = sa_value['name']
                             else:
                                 player_row[key] = value
-                            storage['players'].append(player_row)
+                        storage['players'].append(player_row)
                         storage['impPerMinute'].extend([
                             {
                                 'match_id': mid,

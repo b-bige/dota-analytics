@@ -368,6 +368,18 @@ wheels = [
 ]
 
 [[package]]
+name = "dash-mantine-components"
+version = "2.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dash" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f3/1c/922819c3a1fc096d11221a2f788aa5df61a4c6575582f29417e69944d38f/dash_mantine_components-2.6.0.tar.gz", hash = "sha256:46dadc90cf261b951f087eb96fb64b4b2d9616f854354e1f382c66209dce82c4", size = 930821, upload-time = "2026-02-14T21:47:48.58Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/10/416c602674d67082c41851cacaf521e27989aaf45f93d479b59ab48849c1/dash_mantine_components-2.6.0-py3-none-any.whl", hash = "sha256:55db031186b83febc9d320fe00337f60f33d6d47cdb4160434e9cfb8f29fd105", size = 1377793, upload-time = "2026-02-14T21:47:47.052Z" },
+]
+
+[[package]]
 name = "debugpy"
 version = "1.8.19"
 source = { registry = "https://pypi.org/simple" }
@@ -409,6 +421,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "dash" },
+    { name = "dash-mantine-components" },
     { name = "httpx" },
     { name = "ipykernel" },
     { name = "jupyterlab" },
@@ -425,6 +438,7 @@ dependencies = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "dash", specifier = ">=4.0.0" },
+    { name = "dash-mantine-components", specifier = ">=2.6.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "jupyterlab", specifier = ">=4.5.2" },
