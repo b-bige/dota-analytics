@@ -154,16 +154,53 @@ def render_home_page():
 def render_match_page(match_id):
     query = 'SELECT "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
     rad_team_id, dire_team_id = db.query_select(query, params=(match_id, ))[0]
-    query = '''SELECT hd.name 
+    query = '''
+        SELECT 
+            hd."shortName", 
+            hd."displayName", 
+            mp."isRadiant", 
+            mp.position,
+            mp.networth,
+            mp."goldPerMinute",
+            mp."heroDamage",
+            mp."towerDamage",
+            mp."steamAccountId",
+            CASE 
+                -- TOP LANE: Radiant Offlane (3,4) or Dire Safelane (1,5)
+                WHEN (mp."isRadiant" = true AND mp.position IN ('POSITION_3', 'POSITION_4')) OR 
+                    (mp."isRadiant" = false AND mp.position IN ('POSITION_1', 'POSITION_5')) THEN 1
+                -- MID LANE: Position 2
+                WHEN mp.position = 'POSITION_2' THEN 2
+                -- BOT LANE: Radiant Safelane (1,5) or Dire Offlane (3,4)
+                WHEN (mp."isRadiant" = true AND mp.position IN ('POSITION_1', 'POSITION_5')) OR 
+                    (mp."isRadiant" = false AND mp.position IN ('POSITION_3', 'POSITION_4')) THEN 3
+            END as lane_group
         FROM hero_details hd
         INNER JOIN match_players mp
         ON mp."heroId" = hd.id
-        WHERE mp."matchId" = %s
-        '''
-    
-    layout = dmc.Grid(
+        WHERE mp."match_id" = %s
+        ORDER BY 
+            mp."isRadiant" DESC, -- Radiant players grouped first
+            CASE 
+                -- Sorting Radiant: Top -> Mid -> Bot
+                WHEN mp."isRadiant" = true THEN
+                    CASE 
+                        WHEN mp.position IN ('POSITION_3', 'POSITION_4') THEN 1
+                        WHEN mp.position = 'POSITION_2' THEN 2
+                        WHEN mp.position IN ('POSITION_1', 'POSITION_5') THEN 3
+                    END
+                -- Sorting Dire: Top -> Mid -> Bot
+                ELSE
+                    CASE 
+                        WHEN mp.position IN ('POSITION_1', 'POSITION_5') THEN 1
+                        WHEN mp.position = 'POSITION_2' THEN 2
+                        WHEN mp.position IN ('POSITION_3', 'POSITION_4') THEN 3
+                    END
+            END ASC,
+            mp.position ASC
+    '''
+    players_list = db.query_select(query, params=(match_id, ))
 
-    )
     return dmc.Container(size="xl", fluid=True, children=[
         dmc.Grid(gutter="md", children=[
             
@@ -185,16 +222,16 @@ def render_match_page(match_id):
                 dmc.Stack([
                     dmc.Text("Radiant", fw=700, c="green"),
                     # Create 5 hero placeholders
-                    *[dmc.Skeleton(height=60, radius="sm") for _ in range(5)]
+                    create_match_table(players_list[:5], True)
                 ])
             ]),
 
             # 3. Dire Heroes (3 columns)
             dmc.GridCol(span=12, children=[
                 dmc.Stack([
-                    dmc.Text("Dire", fw=700, c="red", ta="right"),
+                    dmc.Text("Dire", fw=700, c="red"),
                     # Create 5 hero placeholders
-                    *[dmc.Skeleton(height=60, radius="sm") for _ in range(5)]
+                    create_match_table(players_list[5:], False)
                 ])
             ]),
 
@@ -219,41 +256,44 @@ def render_match_page(match_id):
         ])
     ])
 
-def create_hero_card(hero_name, kills, deaths, assists, is_radiant=True):
-    img_url = f"https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/{hero_name}.png"
-    
-    # KDA logic
-    kda_text = f"{kills} / {deaths} / {assists}"
-    
-    return dmc.Paper(
-        withBorder=True,
-        p=5,
-        radius="sm",
-        shadow="xs",
-        mb=5,
-        children=[
-            dmc.Group([
-                # Hero Portrait
-                dmc.Image(
-                    src=img_url,
-                    w=60,
-                    h=34,
-                    radius="xs",
-                    fallbackSrc="https://via.placeholder.com/60x34?text=Hero"
-                ),
-                # Stats Stack
-                dmc.Stack([
-                    dmc.Text(hero_name.replace("npc_dota_hero_", "").title(), size="xs", fw=700),
-                    dmc.Group([
-                        dmc.Text("KDA", size="10px", c="dimmed"),
-                        dmc.Text(kda_text, size="xs", fw=500),
-                    ], gap=4)
-                ], gap=0)
-            ], gap="sm")
-        ],
-        # Subtle border color based on team
-        style={"borderLeft": f"4px solid {'#40c057' if is_radiant else '#fa5252'}"}
+def create_match_table(players_list, is_radiant:bool):
+    header = dmc.TableThead(
+        dmc.TableTr([
+            dmc.TableTh("Hero"),
+            dmc.TableTh("Networth", style={"textAlign": "right"}),
+            dmc.TableTh("GPM", style={"textAlign": "right"}),
+            dmc.TableTh("Hero Damage", style={"textAlign": "right"}),
+            dmc.TableTh("Tower Damage", style={"textAlign": "right"}),
+        ])
     )
+    rows = []
+    for player in players_list:
+        rows.append(create_match_row(*player[:9])) #TODO: remove is_radiant, position from params, add steam acc id somehow
+    return dmc.Table(
+        children=[header, dmc.TableTbody(rows)],
+        verticalSpacing='xs',
+        highlightOnHover=True,
+        withTableBorder=True,
+        style={"borderTop": f"4px solid {'#40c057' if is_radiant else '#fa5252'}"}
+    )
+
+def create_match_row(hero_name, hero_display_name, is_radiant, position, networth, gpm, hero_dmg, tower_dmg, steam_acc_id):
+    img_url = f"https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/{hero_name}.png"
+
+    return dmc.TableTr([
+        # Hero Cell: Image + Name
+        dmc.TableTd(
+            dmc.Group([
+                dmc.Image(src=img_url, w=40, radius="xs"),
+                dmc.Text(hero_display_name, size="sm", fw=600)
+            ], gap="sm")
+        ),
+        # Stats Cells
+        dmc.TableTd(f"{networth:,}", style={"textAlign": "right"}),
+        dmc.TableTd(gpm, style={"textAlign": "right"}),
+        dmc.TableTd(f"{hero_dmg:,}", style={"textAlign": "right"}),
+        dmc.TableTd(f"{tower_dmg:,}", style={"textAlign": "right"}),
+    ])
 
 ##### Filter saving
 
