@@ -8,3 +8,5 @@ SELECT * FROM main_metadata;
 SELECT * FROM picks_bans WHERE match_id = 2049344492;
 ALTER TABLE main_metadata ADD CONSTRAINT pk_main_metadata_match_id PRIMARY KEY(match_id);
 
+SELECT * FROM main_metadata WHERE match_id = 6326723311;
+

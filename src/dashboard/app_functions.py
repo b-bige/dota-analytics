@@ -11,8 +11,11 @@ from db_functions import DotaDB
 
 db = DotaDB(schema='public')
 
-def get_total_matches():
-    return db.query_select('SELECT COUNT(*) FROM match_details;')[0][0]
+def get_total_matches(modifiers: str=''):
+    query = 'SELECT COUNT(*) FROM match_details md '
+    if modifiers:
+        query += modifiers
+    return db.query_select(query)[0][0]
 
 def get_leagues():
     leagues = [result[0] for result in db.query_select(
