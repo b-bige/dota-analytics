@@ -43,7 +43,6 @@ class DotaDB:
                     final_query = sql.SQL(query).format(*[sql.Identifier(name) for name in identifiers])
                 else:
                     final_query = sql.SQL(query)
-
                 cur.execute(final_query, params)
                 return cur.fetchall() if cur.description else None
             
@@ -610,6 +609,7 @@ class DotaDB:
         except:
             logging.error(f"Failed GET request at {self.opendota_url}/{endpoint}")
             return []
+
 
     def get_pg_type(self, pandas_type):
         if pd.api.types.is_integer_dtype(pandas_type):

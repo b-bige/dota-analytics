@@ -105,7 +105,15 @@ WHERE md."startDateTime" BETWEEN 1670194800.0 AND 1670367600.0;
 SELECT * FROM match_details md WHERE 1=1 AND "leagueId" = 13877 AND md."startDateTime" BETWEEN 1639609200.0 AND 1639782000.0;
 SELECT * FROM match_details WHERE "leagueId" = 13877 ORDER BY "startDateTime" ASC;
 
-
-
+SELECT
+    COUNT(*) FILTER (WHERE mpb."isPick" = TRUE) AS pick,
+    COUNT(*) FILTER (WHERE mpb."isPick" = FALSE) AS ban,
+    hd."displayName"
+FROM match_pick_bans mpb
+JOIN hero_details hd
+ON hd.id = mpb."heroId"
+WHERE mpb."heroId" IS NOT NULL 
+    AND mpb.match_id = ANY(ARRAY[1, 2, 3])
+GROUP BY hd."displayName";
 --TODO Separate tables more
 
