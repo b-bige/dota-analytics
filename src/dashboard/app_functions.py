@@ -7,9 +7,19 @@ import sys
 sys.path.append(os.path.abspath('./src/dashboard'))
 sys.path.append(os.path.abspath('./src'))
 
+from theme import PLOTLY_LAYOUT, PLOTLY_COLORSCALES, COLORS
+import plotly.graph_objects as go
+
 from db_functions import DotaDB
 
 db = DotaDB(schema='public')
+
+##### Theming
+def apply_fig_theme(fig: go.Figure):
+    fig.update_layout(**PLOTLY_LAYOUT)
+    return fig
+
+##### Basic and filter helpers
 
 def get_total_matches(modifiers: str='', params=None):
     query = 'SELECT COUNT(*) FROM match_details md '
@@ -67,6 +77,11 @@ def handle_date_filter(dates, base_where=None, params=None):
         params.extend([start_date, end_date])
         return base_where, params
     return base_where, params
+
+##### Overview graph helpers
+def get_match_ids(query, params):
+    return [res[0] for res in db.query_select(query, params=params)]
+
 
 
 

@@ -103,15 +103,9 @@ FROM league_details ld
 WHERE md."startDateTime" BETWEEN 1670194800.0 AND 1670367600.0;
 
 SELECT * FROM match_details md WHERE 1=1 AND "leagueId" = 13877 AND md."startDateTime" BETWEEN 1639609200.0 AND 1639782000.0;
-
 SELECT * FROM match_details WHERE "leagueId" = 13877 ORDER BY "startDateTime" ASC;
 
-SELECT * FROM league_details WHERE id = 13877;
-SELECT id FROM league_details WHERE "displayName" = 'Ultras Dota Pro League 2';
-SELECT MIN(md."startDateTime") 
-            FROM match_details md
-            INNER JOIN league_details ld
-            ON md."leagueId" = ld.id
-            WHERE ld."displayName" = 'Ultras Dota Pro League';
+
+
 --TODO Separate tables more
 
