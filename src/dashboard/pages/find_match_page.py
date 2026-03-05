@@ -1,8 +1,9 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State, no_update
+from dash import html, dcc, callback, Input, Output, State, no_update, ctx
 import dash_mantine_components as dmc
 
 from math import floor
+from urllib.parse import parse_qs
 
 import os
 import sys
@@ -18,20 +19,14 @@ vs_logo = dmc.Avatar(
     "VS",
     radius="xl",
     size="lg",
-    color="yellow", # Dota gold
-    variant="filled",
-    style={
-        "fontWeight": 900,
-        "fontSize": "1.2rem",
-        "boxShadow": "0 0 15px rgba(255, 193, 7, 0.3)", # Subtle glow
-        "border": "2px solid #2C2E33"
-    }
+    color=COLORS['primary'],
+    variant="filled"
 )
 
 dash.register_page(__name__, path='/find-match')
 
 # Dash Pages allows 'layout' to be a function to capture search params
-def layout(league=None, startDate=None, endDate=None, **kwargs):
+def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
         children=[ 
             dmc.ScrollArea(
@@ -47,8 +42,8 @@ def layout(league=None, startDate=None, endDate=None, **kwargs):
                 children=[
                     dmc.Pagination(
                         id='match-pagination',
-                        total=1, 
-                        value=1,
+                        total=0, 
+                        value=int(page),
                         radius="sm",
                         withEdges=True,
                     )
@@ -60,30 +55,27 @@ def layout(league=None, startDate=None, endDate=None, **kwargs):
 @callback( 
         Output(component_id='match-container', component_property='children'),
         Output('match-pagination', 'total'),
+        Output('match-pagination', 'value'),
+        State('url', 'pathname'),
+        State('url', 'search'),
         Input('match-pagination', 'value'),
         Input(component_id='league-filter', component_property='value'),
-        Input(component_id='date-filter', component_property='value')
+        Input(component_id='date-filter', component_property='value'),
+        prevent_initial_call=True
 )
-def update_match_container(page_number, league, dates): #TODO: Add pagination
+def update_match_container_and_pages(pathname, search, page_number, league, dates): #TODO: Add pagination
+    triggered = ctx.triggered_id
+    if pathname != '/find-match':
+        return no_update
     PAGE_SIZE = 20
-    offset = (page_number - 1) * PAGE_SIZE
-    base_where = 'WHERE 1=1'
-    join = ''
-    params = []
-    if league:
-        base_where += ' AND ld."displayName" = %s'
-        params.append(league)
-        join += ' JOIN league_details ld ON md."leagueId" = ld.id '
-    if dates[0]:
-        base_where, params = handle_date_filter(dates, base_where, params)
-    modifiers = join + base_where
-    total_records = get_total_matches(modifiers, params=params) #TODO maybe redundant?
+    offset = (int(page_number) - 1) * PAGE_SIZE
+    clauses, params = handle_filters(league=league, dates=dates)
+    total_records = get_total_matches(clauses, params=params) #TODO maybe redundant?
     total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
     query = f'''
         SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman"
         FROM match_details md
-        INNER JOIN league_details ld ON md."leagueId" = ld.id
-        {base_where}
+        {clauses}
         ORDER BY md."startDateTimeHuman" ASC
         LIMIT %s OFFSET %s
     ''' #TODO Make sorting features
@@ -101,10 +93,21 @@ def update_match_container(page_number, league, dates): #TODO: Add pagination
         params=data_params
     )]          
     elements = [create_match_element(row) for row in matches]
-    return elements, total_pages
+    if triggered in ('league-filter', 'date-filter'):
+        params = parse_qs(search.lstrip('?'))
+        url_league = params.get('league', [None])[0]
+        url_start = params.get('startDate', [None])[0]
+        url_end = params.get('endDate', [None])[0]
+
+        # Only reset if the filter change didn't come from the URL sync
+        filter_matches_url = (league == url_league) and (dates == [url_start, url_end])
+        page_number = 1 if not filter_matches_url else page_number
+        
+    return elements, total_pages, page_number
+    
 
 def create_match_element(row: dict):
-    result_color = 'green' if row['radiant_win'] else 'red'
+    result_color = COLORS['radiant'] if row['radiant_win'] else COLORS['dire']
     row['duration'] = convert_duration_format(row['duration'])
     return dcc.Link(
         dmc.Paper(
@@ -115,7 +118,7 @@ def create_match_element(row: dict):
             children=[
                 dmc.Group([
                     dmc.Badge(f'ID: {row["match_id"]}', variant='outline'),
-                    dmc.Text(f'{row["radiant_team_id"]} vs {row["dire_team_id"]}'),
+                    dmc.Text(f'Radiant ({row["radiant_team_id"]}) vs Dire ({row["dire_team_id"]})'),
                     dmc.Badge('Radiant win', color=result_color, variant='filled') if row['radiant_win'] 
                     else dmc.Badge('Dire win', color=result_color, variant='filled')
                 ], pos='apart'),

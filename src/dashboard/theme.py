@@ -1,50 +1,43 @@
 COLORS = {
-    # Backgrounds
-    "bg_base":      "#0a0c10",   # near-black base
-    "bg_surface":   "#111318",   # card/panel surface
-    "bg_elevated":  "#181c24",   # elevated elements, modals
-    "bg_border":    "#252b38",   # subtle borders
+    "bg_base":      "#f4f6f9",   # off-white page background
+    "bg_surface":   "#ffffff",   # pure white cards
+    "bg_elevated":  "#eef1f6",   # subtle hover / elevated
+    "bg_border":    "#dde3ec",   # soft borders
 
-    # Accents
-    "primary":      "#c8972a",   # Dota gold
-    "primary_dim":  "#8a6420",   # muted gold for hover states
-    "radiant":      "#4caf7d",   # Radiant green
-    "dire":         "#c94f4f",   # Dire red
-    "neutral":      "#7b8fa6",   # neutral stats
+    "primary":      "#2563eb",   # confident blue — accent
+    "primary_dim":  "#93b4f5",   # light blue for secondary elements
+    "radiant":      "#16a34a",   # win / positive
+    "dire":         "#dc2626",   # loss / negative
+    "neutral":      "#6b7280",   # neutral stats
 
-    # Text
-    "text_bright":  "#e8eaf0",   # headings
-    "text_body":    "#9aa5b8",   # body text
-    "text_muted":   "#4f5a6e",   # labels, hints
+    "text_bright":  "#0f172a",   # near-black headings
+    "text_body":    "#374151",   # dark gray body
+    "text_muted":   "#9ca3af",   # light gray labels
 }
 
 PLOTLY_COLORSCALES = {
-    # Gold → Green (winrate, positive metrics)
     "winrate": [
         [0.0, COLORS["dire"]],
         [0.5, COLORS["neutral"]],
         [1.0, COLORS["radiant"]],
     ],
-    # Dark → Gold (pick rate, general intensity)
     "intensity": [
-        [0.0, "#1a1f2e"],
+        [0.0, COLORS["bg_elevated"]],
         [0.5, COLORS["primary_dim"]],
         [1.0, COLORS["primary"]],
     ],
-    # Radiant vs Dire diverging
     "diverging": [
         [0.0,  COLORS["dire"]],
-        [0.5,  "#2a2f3d"],
+        [0.5,  COLORS["bg_border"]],
         [1.0,  COLORS["radiant"]],
     ],
 }
 
-# Reusable Plotly layout base — apply to every figure
 PLOTLY_LAYOUT = dict(
     paper_bgcolor=COLORS["bg_surface"],
     plot_bgcolor=COLORS["bg_surface"],
     font=dict(
-        family="'Rajdhani', 'Barlow Condensed', sans-serif",
+        family="'DM Sans', 'Inter', sans-serif",
         color=COLORS["text_body"],
         size=13,
     ),
@@ -79,3 +72,22 @@ PLOTLY_LAYOUT = dict(
     ),
     margin=dict(l=16, r=16, t=40, b=16),
 )
+
+MANTINE_THEME = {
+    "primaryColor": "blue",
+    "fontFamily": "'DM Sans', sans-serif",
+    "colors": {
+        "gray": [
+            COLORS["bg_surface"],   # 0
+            COLORS["bg_base"],      # 1
+            COLORS["bg_elevated"],  # 2
+            COLORS["bg_border"],    # 3
+            "#c8d0db",              # 4
+            COLORS["text_muted"],   # 5
+            COLORS["neutral"],      # 6
+            COLORS["text_body"],    # 7
+            COLORS["text_bright"],  # 8
+            "#060a10",              # 9
+        ]
+    },
+}

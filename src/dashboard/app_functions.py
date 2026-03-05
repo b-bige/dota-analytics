@@ -21,28 +21,26 @@ def apply_fig_theme(fig: go.Figure):
 
 ##### Basic and filter helpers
 
-def get_total_matches(modifiers: str='', params=None):
+def get_total_matches(clauses: str='', params=None):
     query = 'SELECT COUNT(*) FROM match_details md '
-    if modifiers:
-        query += modifiers
+    if clauses:
+        query += clauses
     return db.query_select(query, params=params)[0][0]
 
 def get_leagues(dates):
-    base_where = 'WHERE 1=1'
+    base_where = 'WHERE 1=1 AND ld."displayName" NOT LIKE \'?%%\' AND ld."displayName" NOT LIKE \'%%?\''
     if dates[0]:
         base_where, params = handle_date_filter(dates, base_where, [])
     else:
         params = None
-    
-    leagues = [result[0] for result in db.query_select(
-        f'''
-            SELECT DISTINCT ld."displayName" dn
-            FROM match_details md
-                INNER JOIN league_details ld ON md."leagueId" = ld.id 
-            {base_where}
-            ORDER BY ld."displayName" ASC;
-        ''', params=params 
-    )]
+    query = f'''
+        SELECT DISTINCT ld."displayName" dn
+        FROM match_details md
+            INNER JOIN league_details ld ON md."leagueId" = ld.id 
+        {base_where} 
+        ORDER BY ld."displayName" ASC;
+    ''' #TODO clean the base_where from here
+    leagues = [result[0] for result in db.query_select(query, params=params)]
     return leagues
 
 def get_date_boundary(boundary, league): 
@@ -66,22 +64,34 @@ def convert_duration_format(duration: int) -> str:
         seconds += '0'
     return minutes + ':' + seconds
 
-def handle_date_filter(dates, base_where=None, params=None):
+def handle_date_filter(dates, where=None, params=None):
     if dates[0]:
-        base_where += ' AND md."startDateTimeHuman" BETWEEN %s AND %s'
+        where += ' AND md."startDateTimeHuman" BETWEEN %s AND %s'
         start_date = dates[0]
         if dates[0] and dates[1]:
             end_date = datetime.fromisoformat(dates[1]) + timedelta(days=1)
         else:
             end_date = datetime.fromisoformat(dates[0]) + timedelta(days=1)
         params.extend([start_date, end_date])
-        return base_where, params
-    return base_where, params
+        return where, params
+    return where, params
 
 ##### Overview graph helpers
 def get_match_ids(query, params):
     return [res[0] for res in db.query_select(query, params=params)]
 
+def handle_filters(**kwargs):
+    where = ' WHERE 1=1'
+    join = ''
+    params = []
+    if kwargs['league']:
+        where += ' AND ld."displayName" = %s'
+        join += ' JOIN league_details ld ON md."leagueId" = ld.id'
+        params.append(kwargs['league'])
+    if kwargs['dates'][0]:
+        where, params = handle_date_filter(dates=kwargs['dates'], where=where, params=params)
+    clauses = join + where
+    return clauses, params
 
 
 

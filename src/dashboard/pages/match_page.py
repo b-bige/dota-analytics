@@ -82,9 +82,9 @@ def render_match_page(match_id):
             dmc.GridCol(span=12, children=[
                 dmc.Paper(withBorder=True, p="md", children=[
                     dmc.Group([
-                        dmc.Text(str(rad_team_id)), #TODO add names
+                        dmc.Text(f'Radiant ({str(rad_team_id)})'), #TODO add names
                         vs_logo,            
-                        dmc.Text(str(dire_team_id)) 
+                        dmc.Text(f'Dire ({str(dire_team_id)})')
                     ], justify="center", gap="xl")
                 ])
             ]),
@@ -109,24 +109,24 @@ def render_match_page(match_id):
                 ])
             ]),
 
-            dmc.GridCol(span=8, children=[
-                dmc.Paper(withBorder=True, p="sm", h="100%", children=[
-                    dmc.Text("Net Worth Advantage", size="xs", mb="sm"),
-                    dmc.Skeleton(height=300, width="100%"), # The Graph placeholder
-                    dmc.Group([
-                        dmc.Skeleton(height=40, width=100),
-                        dmc.Skeleton(height=40, width=100),
-                    ], justify="center", mt="md")
-                ])
-            ]),
+            # dmc.GridCol(span=8, children=[
+            #     dmc.Paper(withBorder=True, p="sm", h="100%", children=[
+            #         dmc.Text("Net Worth Advantage", size="xs", mb="sm"),
+            #         dmc.Skeleton(height=300, width="100%"), # The Graph placeholder
+            #         dmc.Group([
+            #             dmc.Skeleton(height=40, width=100),
+            #             dmc.Skeleton(height=40, width=100),
+            #         ], justify="center", mt="md")
+            #     ])
+            # ]),
 
-            # --- ROW 3: REPLAY / LOGS (Full Width) ---
-            dmc.GridCol(span=12, children=[
-                dmc.Paper(withBorder=True, p="md", children=[
-                    dmc.Skeleton(height=20, width="30%", mb="md"), # "Match Timeline" title
-                    dmc.Skeleton(height=100, width="100%"),
-                ])
-            ])
+            # # --- ROW 3: REPLAY / LOGS (Full Width) ---
+            # dmc.GridCol(span=12, children=[
+            #     dmc.Paper(withBorder=True, p="md", children=[
+            #         dmc.Skeleton(height=20, width="30%", mb="md"), # "Match Timeline" title
+            #         dmc.Skeleton(height=100, width="100%"),
+            #     ])
+            # ])
         ])
     ])
 

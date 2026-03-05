@@ -21,14 +21,15 @@ from app_functions import *
 
 from dash import Dash, html, dcc, Input, Output, State, page_container, no_update
 import dash_mantine_components as dmc
-from flask import redirect, request
+
+from theme import *
 
 db = DotaDB(schema='public')
 app = Dash(__name__, use_pages=True, suppress_callback_exceptions=True)
 
 server = app.server
 app.layout = dmc.MantineProvider(
-    theme={'colorScheme': 'dark', 'primaryColor': 'indigo'},
+    theme=MANTINE_THEME,
     children=[
         dcc.Location(id='url', refresh=False), 
         dmc.AppShell(
@@ -42,6 +43,7 @@ app.layout = dmc.MantineProvider(
                     },
                     children=[
                         dmc.Tabs(
+                            id='navigation-tabs',
                             children=[
                                 dmc.TabsList(
                                     children=[
@@ -51,7 +53,7 @@ app.layout = dmc.MantineProvider(
                                                 dcc.Link(
                                                     dmc.Group([
                                                         dmc.Title('Dota 2 Analytics'),
-                                                        dmc.Badge(id='header-badge', variant='gradient')
+                                                        dmc.Badge(id='header-badge')
                                                     ]),
                                                     href='/',
                                                     style={
@@ -96,6 +98,15 @@ app.layout = dmc.MantineProvider(
     ]
 )
 
+@app.callback(
+        Output('navigation-tabs', 'value'),
+        Input('url', 'pathname')
+)
+def set_tab(pathname):
+    if pathname == '/':
+        return 'overview'
+    elif pathname == '/find-match':
+        return 'find-match'
 
 @app.callback(
         Output(component_id='header-badge', component_property='children'),
@@ -114,16 +125,18 @@ def update_logo(pathname:str):
 )
 def toggle_navbar_visibility(pathname: str):
     # Only show the sidebar width if we are on the find-match page
-    if pathname.startswith('/find-match') or pathname.startswith('/'):
+    if pathname in ['/', '/find-match']:
         return {'width': 300, 'breakpoint': 'sm', 'collapsed': {'mobile': True, 'desktop': False}}
     return {'width': 0, 'collapsed': {'mobile': True, 'desktop': True}}
 
 @app.callback(
         Output(component_id='date-filter', component_property='minDate'),
+        Output('date-filter', 'defaultDate'),
         Input(component_id='league-filter', component_property='value')
 )
 def set_min_date(league=None):
-    return get_date_boundary('MIN', league)
+    min_date = get_date_boundary('MIN', league)
+    return min_date, min_date
 
 @app.callback(
         Output(component_id='date-filter', component_property='maxDate'),
@@ -149,6 +162,25 @@ def set_leagues(dates):
 def update_url_from_filters(pathname, league, dates):
     if pathname in ['/find-match', '/']:
         params = {}
+        if league: params["league"] = league
+        if dates:
+            if dates[0]: params["startDate"] = dates[0]
+            if dates[1]: params["endDate"] = dates[1]
+        return f"?{urlencode(params)}" if params else ""
+    return no_update
+
+@app.callback(
+    Output("url", "search", allow_duplicate=True),
+    State('url', 'pathname'),
+    Input('match-pagination', 'value'),
+    State("league-filter", "value"),
+    State("date-filter", "value"),
+    prevent_initial_call=True
+)
+def update_url_from_pagination(pathname, page_number, league, dates):
+    if pathname == '/find-match':
+        params = {}
+        if page_number: params["page"] = page_number
         if league: params["league"] = league
         if dates:
             if dates[0]: params["startDate"] = dates[0]
@@ -186,7 +218,7 @@ def sync_sidebar_from_url(pathname, search):
                     minDate=get_date_boundary('MIN', saved_league),
                     maxDate=get_date_boundary('MAX', saved_league),
                     value=dates,
-                    # defaultDate=saved_start,
+                    defaultDate=saved_start if saved_start else None,
                     mt="md"
                 )
             ]
