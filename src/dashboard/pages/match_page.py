@@ -20,7 +20,7 @@ vs_logo = dmc.Avatar(
 # The <match_id> syntax tells Dash to pass that part of the URL as a variable
 dash.register_page(__name__, path_template='/match/<match_id>')
 
-def layout(match_id=None):
+def layout(match_id=None, **kwargs):
     if not match_id:
         return html.Div("No Match ID provided")
     return render_match_page(match_id)

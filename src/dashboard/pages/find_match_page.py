@@ -57,20 +57,6 @@ def layout(league=None, startDate=None, endDate=None, **kwargs):
         ]
     )
 
-@callback(
-        Output(component_id='date-filter', component_property='minDate'),
-        Input(component_id='league-filter', component_property='value')
-)
-def set_min_date(league=None):
-    return get_date_boundary('MIN', league)
-
-@callback(
-        Output(component_id='date-filter', component_property='maxDate'),
-        Input(component_id='league-filter', component_property='value')
-)
-def set_max_date(league=None):
-    return get_date_boundary('MAX', league)
-
 @callback( 
         Output(component_id='match-container', component_property='children'),
         Output('match-pagination', 'total'),
@@ -82,31 +68,23 @@ def update_match_container(page_number, league, dates): #TODO: Add pagination
     PAGE_SIZE = 20
     offset = (page_number - 1) * PAGE_SIZE
     base_where = 'WHERE 1=1'
-
+    join = ''
     params = []
     if league:
         base_where += ' AND ld."displayName" = %s'
         params.append(league)
+        join += ' JOIN league_details ld ON md."leagueId" = ld.id '
     if dates[0]:
-        base_where += ' AND md."startDateTime" BETWEEN %s AND %s'
-        start_date = datetime.fromisoformat(dates[0])
-        if dates[0] and dates[1]:
-            dates[1] = (datetime.fromisoformat(dates[1]) + timedelta(days=1)).timestamp()
-        else:
-            dates[1] = (start_date + timedelta(days=1)).timestamp()
-        dates[0] = start_date.timestamp()
-        params.extend(dates)
-    
-    modifiers = f'INNER JOIN league_details ld ON md."leagueId" = ld.id {base_where}'
-    total_records = get_total_matches(modifiers) #TODO maybe redundant?
+        base_where, params = handle_date_filter(dates, base_where, params)
+    modifiers = join + base_where
+    total_records = get_total_matches(modifiers, params=params) #TODO maybe redundant?
     total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
-
     query = f'''
-        SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTime"
+        SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman"
         FROM match_details md
         INNER JOIN league_details ld ON md."leagueId" = ld.id
         {base_where}
-        ORDER BY md."startDateTime" DESC
+        ORDER BY md."startDateTimeHuman" ASC
         LIMIT %s OFFSET %s
     ''' #TODO Make sorting features
     data_params = params + [PAGE_SIZE, offset]
@@ -127,12 +105,7 @@ def update_match_container(page_number, league, dates): #TODO: Add pagination
 
 def create_match_element(row: dict):
     result_color = 'green' if row['radiant_win'] else 'red'
-    minutes = str(floor(row['duration'] / 60))
-    seconds = str(row['duration'] % 60)
-    if len(seconds) == 1: #TODO: collapse into one 
-        seconds += '0'
-    row['duration'] = minutes + ':' + seconds
-    row['start_date'] = datetime.fromtimestamp(row['start_date'])
+    row['duration'] = convert_duration_format(row['duration'])
     return dcc.Link(
         dmc.Paper(
             withBorder=True,
