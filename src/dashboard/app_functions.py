@@ -202,7 +202,7 @@ def get_most_banned(clauses, params):
     return banned_fig
 
 def get_top_winrate(clauses, params):
-    query = 'SELECT COUNT(id) FROM match_details md' + clauses
+    query = 'SELECT COUNT(md.id) FROM match_details md' + clauses
     match_count = db.query_select(query, params=params)[0][0]
     min_picks = max(2, match_count // 10)
     if clauses == ' WHERE 1=1' and len(params) == 0:
