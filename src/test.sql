@@ -125,6 +125,8 @@ FROM match_details;
 SELECT COUNT(DISTINCT "radiantTeamId") FROM  match_details;
 SELECT COUNT(DISTINCT "direTeamId") FROM  match_details;
 
+SELECT DISTINCT week FROM hero_stats ORDER BY week DESC;
+
 SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman"
 FROM match_details md
 JOIN team_details radiant ON radiant.id = md."radiantTeamId"

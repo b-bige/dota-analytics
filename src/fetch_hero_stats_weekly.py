@@ -22,7 +22,7 @@ def main():
     try:
         logging.info("Starting weekly hero_stats data fetching...")
         db = dbf.DotaDB()
-        with httpx.Client(headers=db.stratz_headers) as client:
+        with httpx.Client(headers=db.stratz_headers, timeout=httpx.Timeout(30.0, read=60.0)) as client:
             query = 'SELECT id FROM patches ORDER BY id DESC LIMIT 1'
             patch_id = db.query_select(query)[0][0]
             query = '''

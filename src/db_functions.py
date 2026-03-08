@@ -138,7 +138,8 @@ class DotaDB:
             KeyError,
             httpx.HTTPError,
             httpx.ConnectError, 
-            httpx.ConnectTimeout
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
         )),
         before_sleep=lambda retry_state: logging.warning(
             f"Retry attempt {retry_state.attempt_number} after error: {retry_state.outcome.exception()}"
