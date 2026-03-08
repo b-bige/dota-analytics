@@ -13,7 +13,10 @@ from app_functions import *
 
 dash.register_page(__name__, path='')
 
-_winrate_fig, _picked_fig, _banned_fig  = get_top_heroes_graphs()
+clauses, params = handle_filters(league=None, dates=[None])
+_winrate_fig = get_top_winrate(clauses, params)
+_picked_fig = get_most_picked(clauses, params)
+_banned_fig = get_most_banned(clauses, params)
 
 def layout(**kwargs):
     return [
@@ -73,47 +76,36 @@ def layout(**kwargs):
     ]
 
 @callback(
+        Output('total-matches', 'children'),
+        Output('stat-radiant-win', 'children'),
+        Output('stat-avg-duration', 'children'),
         Output('top-five-hero-winrate', 'figure'),
         Output('top-five-picked', 'figure'),
         Output('top-five-banned', 'figure'),
         State('url', 'pathname'),
-        Input('league-filter', 'value'),
-        Input('date-filter', 'value')
-)
-def update_top_heroes(pathname, league, dates):
-    t = time.time()
-    if pathname != '/':
-        return no_update
-    ### Handling filtering
-    logging.info(f'update_top_heroes: {time.time()-t:.2f}s")')
-    return get_top_heroes_graphs(league, dates)
-
-@callback(
-        Output('total-matches', 'children'),
-        Output('stat-radiant-win', 'children'),
-        Output('stat-avg-duration', 'children'),
-        State('url', 'pathname'),
         Input("league-filter", "value"),
-        Input("date-filter", "value")
+        Input("date-filter", "value"),
+        prevent_initial_call=True
 )
-def update_overview_stats(pathname, league, dates):
-    t = time.time()
+def update_overview(pathname, league, dates):
     if pathname != '/':
         return no_update
     clauses, params = handle_filters(league=league, dates=dates)
-    rw_query = '''
-        SELECT AVG(CAST("didRadiantWin" AS INT)) 
-        FROM match_details md 
-    ''' + clauses
-    agl_query = '''
-        SELECT AVG("durationSeconds") 
-        FROM match_details md 
-    ''' + clauses
-    radiant_win = str(round(db.query_select(rw_query, params=params)[0][0], 2)) + '%'
-    avg_game_length = convert_duration_format(db.query_select(agl_query, params=params)[0][0])
-    found_matches = get_total_matches(clauses, params=params)
-    logging.info(f'update_overview_stats: {time.time()-t:.2f}s")')
-    return found_matches, radiant_win, avg_game_length
+    stats_query = '''
+    SELECT 
+        COUNT(*),
+        AVG(CAST("didRadiantWin" AS INT)),
+        AVG("durationSeconds")
+    FROM match_details md
+''' + clauses
+    results = db.query_select(stats_query, params=params)[0]
+    found_matches = results[0]
+    radiant_win = str(round(results[1], 2)) + '%'
+    avg_game_length = convert_duration_format(results[2]) 
+    winrate_fig = get_top_winrate(clauses, params)
+    picked_fig = get_most_picked(clauses, params)
+    banned_fig = get_most_banned(clauses, params)
+    return found_matches, radiant_win, avg_game_length, winrate_fig, picked_fig, banned_fig
 
 def stat_card(label, id):
     return dmc.Paper(

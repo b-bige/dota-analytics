@@ -142,5 +142,84 @@ SELECT *
         ORDER BY md."startDateTimeHuman" ASC
         LIMIT 20 OFFSET 85020;
 
+EXPLAIN ANALYZE
+SELECT AVG(CAST(mp."isVictory" AS INT)) AS winrate,
+    COUNT(*) as picks,
+    hd."displayName"
+FROM match_players mp
+JOIN hero_details hd ON mp."heroId" = hd.id
+JOIN match_details md ON mp.match_id = md.id
+GROUP BY hd."displayName"
+HAVING COUNT(*) >= 10
+ORDER BY winrate DESC
+LIMIT 5;
+
+EXPLAIN ANALYZE
+SELECT
+    COUNT(*) FILTER (WHERE mpb."isPick" = FALSE) AS count,
+    hd."displayName"
+FROM match_pick_bans mpb
+JOIN hero_details hd
+ON hd.id = mpb."heroId"
+JOIN match_details md
+ON md.id = mpb.match_id
+GROUP BY hd."displayName", hd."shortName"
+ORDER BY count DESC
+LIMIT 5;
+
+SELECT COUNT(*) FILTER (
+            WHERE mpb."isPick" = TRUE
+        ) AS picks,
+        hd."displayName"
+    FROM match_pick_bans mpb
+    JOIN hero_details hd ON hd.id = mpb."heroId"
+    JOIN match_details md ON md.id = mpb.match_id 
+    GROUP BY hd."displayName",
+        hd."shortName"
+    ORDER BY picks DESC
+    LIMIT 5;
+WITH top_picked AS (
+    SELECT COUNT(*) FILTER (
+            WHERE mpb."isPick" = TRUE
+        ) AS picks,
+        hd."displayName"
+    FROM match_pick_bans mpb
+    JOIN hero_details hd ON hd.id = mpb."heroId"
+    JOIN match_details md ON md.id = mpb.match_id 
+    GROUP BY hd."displayName",
+        hd."shortName"
+    ORDER BY picks DESC
+    LIMIT 5
+), top_banned AS (
+    SELECT COUNT(*) FILTER (
+            WHERE mpb."isPick" = FALSE
+        ) AS bans,
+        hd."displayName"
+    FROM match_pick_bans mpb
+    JOIN hero_details hd ON hd.id = mpb."heroId"
+    JOIN match_details md ON md.id = mpb.match_id 
+    GROUP BY hd."displayName",
+        hd."shortName"
+    ORDER BY bans DESC
+    LIMIT 5
+)
+SELECT * FROM top_picked
+UNION
+SELECT * FROM top_banned;
+
+SELECT COUNT(*) FILTER (
+            WHERE mpb."isPick" = FALSE
+        ) AS bans,
+        hd."displayName"
+    FROM match_pick_bans mpb
+    JOIN hero_details hd ON hd.id = mpb."heroId"
+    JOIN match_details md ON md.id = mpb.match_id 
+    GROUP BY hd."displayName",
+        hd."shortName"
+    ORDER BY bans DESC
+    LIMIT 5;
+
+SELECT * FROM hero_pick_ban_stats;
+
 --TODO Separate tables more
 

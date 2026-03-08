@@ -21,11 +21,15 @@ from app_functions import *
 
 from dash import Dash, html, dcc, Input, Output, State, page_container, no_update
 import dash_mantine_components as dmc
+
 import logging
+from basic_logger import setup_logger
+import time
 
 from theme import *
 
 db = DotaDB(schema='public')
+setup_logger(logfile_path='logs/dashboard_app.log')
 app = Dash(__name__, use_pages=True, suppress_callback_exceptions=True)
 
 server = app.server
@@ -118,7 +122,8 @@ def update_logo(pathname:str):
         match_id = pathname.split('/')[-1]
         return f'Match ID {match_id}'
     else:
-        return f'{get_total_matches()} matches found'
+        total_matches = get_total_matches()
+        return f'{total_matches} matches found'
 
 @app.callback(
     Output('main-shell', 'navbar'),

@@ -598,6 +598,8 @@ class DotaDB:
             
             table_name = table_map[key]
             self.insert_df_into_table(df, table_name)
+            self.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
+            self.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
     
     def query_opendota(self, client: httpx.Client, endpoint):
