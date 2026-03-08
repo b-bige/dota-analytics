@@ -73,10 +73,13 @@ def layout(**kwargs):
         Output('top-five-hero-winrate', 'figure'),
         Output('top-five-picked', 'figure'),
         Output('top-five-banned', 'figure'),
+        State('url', 'pathname'),
         Input('league-filter', 'value'),
         Input('date-filter', 'value')
 )
-def update_top_heroes(league, dates):
+def update_top_heroes(pathname, league, dates):
+    if pathname != '/':
+        return no_update
     ### Handling filtering
     return get_top_heroes_graphs(league, dates)
 
@@ -84,10 +87,13 @@ def update_top_heroes(league, dates):
         Output('total-matches', 'children'),
         Output('stat-radiant-win', 'children'),
         Output('stat-avg-duration', 'children'),
+        State('url', 'pathname'),
         Input("league-filter", "value"),
         Input("date-filter", "value")
 )
-def update_overview_stats(league, dates):
+def update_overview_stats(pathname, league, dates):
+    if pathname != '/':
+        return no_update
     clauses, params = handle_filters(league=league, dates=dates)
     rw_query = '''
         SELECT AVG(CAST("didRadiantWin" AS INT)) 

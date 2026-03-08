@@ -25,7 +25,7 @@ def apply_fig_theme(fig: go.Figure):
 ##### Basic and filter helpers
 
 def get_total_matches(clauses: str='', params=None):
-    query = 'SELECT COUNT(*) FROM match_details md '
+    query = 'SELECT COUNT(id) FROM match_details md '
     if clauses:
         query += clauses
     return db.query_select(query, params=params)[0][0]

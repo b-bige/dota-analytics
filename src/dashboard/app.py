@@ -132,7 +132,8 @@ def toggle_navbar_visibility(pathname: str):
 @app.callback(
         Output(component_id='date-filter', component_property='minDate'),
         Output('date-filter', 'defaultDate'),
-        Input(component_id='league-filter', component_property='value')
+        Input(component_id='league-filter', component_property='value'),
+        prevent_initial_call=True
 )
 def set_min_date(league=None):
     min_date = get_date_boundary('MIN', league)
@@ -140,14 +141,16 @@ def set_min_date(league=None):
 
 @app.callback(
         Output(component_id='date-filter', component_property='maxDate'),
-        Input(component_id='league-filter', component_property='value')
+        Input(component_id='league-filter', component_property='value'),
+        prevent_initial_call=True
 )
 def set_max_date(league=None):
     return get_date_boundary('MAX', league)
 
 @app.callback( #TODO: Merge the above callbacks and this to one, add a helper function that deals with all the logic of updating filters
         Output('league-filter', 'data'),
-        Input('date-filter', 'value')
+        Input('date-filter', 'value'),
+        prevent_initial_call=True
 )
 def set_leagues(dates):
     return get_leagues(dates)
@@ -156,8 +159,7 @@ def set_leagues(dates):
     Output("url", "search"),
     State('url', 'pathname'),
     Input("league-filter", "value"),
-    Input("date-filter", "value"),
-    prevent_initial_call=True
+    Input("date-filter", "value")
 )
 def update_url_from_filters(pathname, league, dates):
     if pathname in ['/find-match', '/']:
