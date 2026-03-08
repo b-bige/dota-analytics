@@ -96,9 +96,9 @@ class DotaDB:
                 else:
                     raise KeyError
         except Exception as e:
-            print(f"Error creating table '{table_name}': {e}")
+            logging.error(f"Error creating table '{table_name}': {e}")
             return
-        print(f"Table '{table_name}' created successfully.")
+        logging.info(f"Table '{table_name}' created successfully.")
 
     def insert_df_into_table(self, df, table_name, jsonb_cols=[]):
         df = df.convert_dtypes()
@@ -117,9 +117,9 @@ class DotaDB:
 
                 conn.commit()
         except Exception as e:
-            print(f"Error inserting data into table '{table_name}': {e}")
+            logging.error(f"Error inserting data into table '{table_name}': {e}")
             return
-        print(f"Data inserted into table '{table_name}' successfully.")
+        logging.info(f"Inserted {len(clean_df)} rows into table '{table_name}' successfully.")
 
     def query_execute(self, query, identifiers=None, params=None):
         with psycopg.connect(self.conn_str) as conn:

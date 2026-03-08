@@ -115,5 +115,15 @@ ON hd.id = mpb."heroId"
 WHERE mpb."heroId" IS NOT NULL 
     AND mpb.match_id = ANY(ARRAY[1, 2, 3])
 GROUP BY hd."displayName";
+
+SELECT DISTINCT "radiantTeamId" 
+FROM match_details 
+UNION 
+SELECT DISTINCT "direTeamId" 
+FROM match_details;
+
+SELECT COUNT(DISTINCT "radiantTeamId") FROM  match_details;
+SELECT COUNT(DISTINCT "direTeamId") FROM  match_details;
+
 --TODO Separate tables more
 
