@@ -26,8 +26,11 @@ def layout(match_id=None, **kwargs):
     return render_match_page(match_id)
 
 def render_match_page(match_id):
-    query = 'SELECT "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
-    rad_team_id, dire_team_id = db.query_select(query, params=(match_id, ))[0]
+    query = 'SELECT "didRadiantWin", "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
+    rad_win, rad_team_id, dire_team_id = db.query_select(query, params=(match_id, ))[0]
+    query = 'SELECT name, logo FROM team_details WHERE id = %s'
+    rad_name, rad_logo = db.query_select(query, params=(rad_team_id, ))[0]
+    dire_name, dire_logo = db.query_select(query, params=(dire_team_id, ))[0]
     query = '''
         SELECT 
             hd."shortName", 
@@ -74,18 +77,31 @@ def render_match_page(match_id):
             mp.position ASC
     '''
     players_list = db.query_select(query, params=(match_id, ))
-
+    result_color = COLORS['radiant'] if rad_win else COLORS['dire']
     return dmc.Container(size="xl", fluid=True, children=[
         dmc.Grid(gutter="md", children=[
             
             # --- ROW 1: HEADER STATS (Full Width) ---
             dmc.GridCol(span=12, children=[
                 dmc.Paper(withBorder=True, p="md", children=[
-                    dmc.Group([
-                        dmc.Text(f'Radiant ({str(rad_team_id)})'), #TODO add names
-                        vs_logo,            
-                        dmc.Text(f'Dire ({str(dire_team_id)})')
-                    ], justify="center", gap="xl")
+                    html.Div(style={"display": "flex", "alignItems": "center", "width": "100%"}, children=[
+                        # Left side - Radiant
+                        html.Div(style={"flex": "1 1 0", "display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "12px"}, children=[
+                            dmc.Badge('Radiant win', color=result_color, variant='filled') if rad_win else None,
+                            dmc.Image(src=rad_logo if rad_logo else '/assets/no_image.svg', w=100),
+                            dmc.Text(f'{rad_name}'),
+                        ]),
+                        # Center - VS logo (fixed, doesn't grow)
+                        html.Div(style={"flex": "0 0 auto", "padding": "0 24px"}, children=[
+                            vs_logo
+                        ]),
+                        # Right side - Dire
+                        html.Div(style={"flex": "1 1 0", "display": "flex", "alignItems": "center", "justifyContent": "flex-start", "gap": "12px"}, children=[
+                            dmc.Text(f'{dire_name}'),
+                            dmc.Image(src=dire_logo if dire_logo else '/assets/no_image.svg', w=100),
+                            dmc.Badge('Dire win', color=result_color, variant='filled') if not rad_win else None,
+                        ]),
+                    ])
                 ])
             ]),
 

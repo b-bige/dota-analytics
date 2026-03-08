@@ -71,7 +71,7 @@ app.layout = dmc.MantineProvider(
                                                 ),
                                                 dcc.Link(
                                                     dmc.TabsTab('Find match', value='find-match'),
-                                                    href='/find-match',
+                                                    href='/find-match?page=1',
                                                     style={'textDecoration': 'none', 'color': 'inherit'}
                                                 ),
                                             ],

@@ -125,5 +125,20 @@ FROM match_details;
 SELECT COUNT(DISTINCT "radiantTeamId") FROM  match_details;
 SELECT COUNT(DISTINCT "direTeamId") FROM  match_details;
 
+SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman"
+FROM match_details md
+JOIN team_details radiant ON radiant.id = md."radiantTeamId"
+JOIN team_details dire ON dire.id = md."direTeamId";
+
+SELECT * FROM team_details td WHERE td.id = 5635538;
+
+SELECT *
+        FROM match_details md
+        JOIN team_details radiant ON radiant.id = md."radiantTeamId"
+        JOIN team_details dire ON dire.id = md."direTeamId"
+        JOIN league_details l ON l.id = md."leagueId"
+        ORDER BY md."startDateTimeHuman" ASC
+        LIMIT 20 OFFSET 85020;
+
 --TODO Separate tables more
 

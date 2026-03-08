@@ -82,8 +82,13 @@ def update_match_container_and_pages(pathname, search, page_number, league, date
         page_number = 1 if not filter_matches_url or page_number > total_pages else page_number
     offset = (int(page_number) - 1) * PAGE_SIZE
     query = f'''
-        SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman"
+        SELECT md.id, md."radiantTeamId", md."direTeamId", 
+        md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman",
+        radiant.name, dire.name, radiant.logo, dire.logo, l."displayName"
         FROM match_details md
+        LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"
+        LEFT JOIN team_details dire ON dire.id = md."direTeamId"
+        LEFT JOIN league_details l ON l.id = md."leagueId"
         {clauses}
         ORDER BY md."startDateTimeHuman" ASC
         LIMIT %s OFFSET %s
@@ -95,7 +100,12 @@ def update_match_container_and_pages(pathname, search, page_number, league, date
         'dire_team_id',
         'radiant_win', 
         'duration',
-        'start_date'
+        'start_date',
+        'radiant_name',
+        'dire_name', 
+        'radiant_logo',
+        'dire_logo',
+        'league_name'
     ]
     matches = [dict(zip(columns, md)) for md in db.query_select(
         query=query,
@@ -117,13 +127,22 @@ def create_match_element(row: dict):
             mb='sm', # Margin bottom for spacing
             children=[
                 dmc.Group([
-                    dmc.Badge(f'ID: {row["match_id"]}', variant='outline'),
-                    dmc.Text(f'Radiant ({row["radiant_team_id"]}) vs Dire ({row["dire_team_id"]})'),
-                    dmc.Badge('Radiant win', color=result_color, variant='filled') if row['radiant_win'] 
-                    else dmc.Badge('Dire win', color=result_color, variant='filled')
+                    dmc.Image(
+                        src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg',
+                        w=50
+                    ),
+                    dmc.Text(f'{row['radiant_name']} vs {row['dire_name']}'),
+                    dmc.Image(
+                        src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg',
+                        w=50
+                    ),
+                    dmc.Badge('Radiant win', color=result_color, variant='filled') if row['radiant_win']
+                    else dmc.Badge('Dire win', color=result_color, variant='filled'),
+                    dmc.Badge(f'{row['league_name'] if row['league_name'] else 'League not found'}', variant='gradient')
                 ], pos='apart'),
                 dmc.Text(f'Duration: {row['duration']}', size='sm', c='dimmed'),
-                dmc.Text(f'Start date: {row['start_date']}', size='sm', c='dimmed')
+                dmc.Text(f'Start date: {row['start_date']}', size='sm', c='dimmed'),
+                dmc.Text(f'ID: {row["match_id"]}', size='sm', c='dimmed')
             ]
         ),
         href=f'/match/{row['match_id']}',
