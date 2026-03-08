@@ -68,10 +68,19 @@ def update_match_container_and_pages(pathname, search, page_number, league, date
     if pathname != '/find-match':
         return no_update
     PAGE_SIZE = 20
-    offset = (int(page_number) - 1) * PAGE_SIZE
     clauses, params = handle_filters(league=league, dates=dates)
     total_records = get_total_matches(clauses, params=params) #TODO maybe redundant?
     total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
+    if triggered in ('league-filter', 'date-filter'):
+        url_params = parse_qs(search.lstrip('?'))
+        url_league = url_params.get('league', [None])[0]
+        url_start = url_params.get('startDate', [None])[0]
+        url_end = url_params.get('endDate', [None])[0]
+
+        # Only reset if the filter change didn't come from the URL sync
+        filter_matches_url = (league == url_league) and (dates == [url_start, url_end])
+        page_number = 1 if not filter_matches_url or page_number > total_pages else page_number
+    offset = (int(page_number) - 1) * PAGE_SIZE
     query = f'''
         SELECT md.id, md."radiantTeamId", md."direTeamId", md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman"
         FROM match_details md
@@ -93,15 +102,6 @@ def update_match_container_and_pages(pathname, search, page_number, league, date
         params=data_params
     )]          
     elements = [create_match_element(row) for row in matches]
-    if triggered in ('league-filter', 'date-filter'):
-        params = parse_qs(search.lstrip('?'))
-        url_league = params.get('league', [None])[0]
-        url_start = params.get('startDate', [None])[0]
-        url_end = params.get('endDate', [None])[0]
-
-        # Only reset if the filter change didn't come from the URL sync
-        filter_matches_url = (league == url_league) and (dates == [url_start, url_end])
-        page_number = 1 if not filter_matches_url else page_number
         
     return elements, total_pages, page_number
     
