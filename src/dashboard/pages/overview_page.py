@@ -4,6 +4,9 @@ import dash_mantine_components as dmc
 import plotly.express as px
 import plotly.graph_objects as go
 
+import time
+import logging
+
 from theme import PLOTLY_COLORSCALES, COLORS
 
 from app_functions import *
@@ -78,9 +81,11 @@ def layout(**kwargs):
         Input('date-filter', 'value')
 )
 def update_top_heroes(pathname, league, dates):
+    t = time.time()
     if pathname != '/':
         return no_update
     ### Handling filtering
+    logging.info(f'update_top_heroes: {time.time()-t:.2f}s")')
     return get_top_heroes_graphs(league, dates)
 
 @callback(
@@ -92,6 +97,7 @@ def update_top_heroes(pathname, league, dates):
         Input("date-filter", "value")
 )
 def update_overview_stats(pathname, league, dates):
+    t = time.time()
     if pathname != '/':
         return no_update
     clauses, params = handle_filters(league=league, dates=dates)
@@ -106,6 +112,7 @@ def update_overview_stats(pathname, league, dates):
     radiant_win = str(round(db.query_select(rw_query, params=params)[0][0], 2)) + '%'
     avg_game_length = convert_duration_format(db.query_select(agl_query, params=params)[0][0])
     found_matches = get_total_matches(clauses, params=params)
+    logging.info(f'update_overview_stats: {time.time()-t:.2f}s")')
     return found_matches, radiant_win, avg_game_length
 
 def stat_card(label, id):

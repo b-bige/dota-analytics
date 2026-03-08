@@ -21,6 +21,7 @@ from app_functions import *
 
 from dash import Dash, html, dcc, Input, Output, State, page_container, no_update
 import dash_mantine_components as dmc
+import logging
 
 from theme import *
 
@@ -159,7 +160,8 @@ def set_leagues(dates):
     Output("url", "search"),
     State('url', 'pathname'),
     Input("league-filter", "value"),
-    Input("date-filter", "value")
+    Input("date-filter", "value"),
+    prevent_initial_call=True
 )
 def update_url_from_filters(pathname, league, dates):
     if pathname in ['/find-match', '/']:
