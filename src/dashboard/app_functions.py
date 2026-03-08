@@ -227,6 +227,7 @@ def get_top_winrate(clauses, params):
             ON mp."heroId" = hd.id
             JOIN match_details md
             ON mp.match_id = md.id
+            {clauses}
             GROUP BY hd."displayName"
             HAVING COUNT(*) >= %s
             ORDER BY winrate DESC
