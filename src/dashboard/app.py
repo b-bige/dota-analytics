@@ -248,7 +248,7 @@ def sync_sidebar_from_url(pathname, search):
                 dmc.MultiSelect(
                     id='teams-filter',
                     label='Pro teams',
-                    placeholder='Select 2 teams To See Head-to-Head',
+                    placeholder='Select 2 To See Head-to-Head',
                     data=teams_data,
                     value=teams,
                     searchable=True

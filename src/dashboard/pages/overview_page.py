@@ -102,6 +102,8 @@ def update_overview(pathname, patch, league, teams, dates):
     )
     results = db.query_select(query, params=params)[0]
     found_matches = results[0]
+    if found_matches == 0:
+        return found_matches, 0, 0, None, None, None
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
     winrate_fig = get_top_winrate(qb.copy())
