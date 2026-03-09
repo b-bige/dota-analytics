@@ -13,10 +13,9 @@ from app_functions import *
 
 dash.register_page(__name__, path='')
 
-clauses, params = handle_filters(league=None, dates=[None])
-_winrate_fig = get_top_winrate(clauses, params)
-_picked_fig = get_most_picked(clauses, params)
-_banned_fig = get_most_banned(clauses, params)
+_winrate_fig = get_top_winrate(QueryBuilder())
+_picked_fig  = get_most_picked(QueryBuilder())
+_banned_fig  = get_most_banned(QueryBuilder())
 
 def layout(**kwargs):
     return [
@@ -83,28 +82,30 @@ def layout(**kwargs):
         Output('top-five-picked', 'figure'),
         Output('top-five-banned', 'figure'),
         State('url', 'pathname'),
+        Input('patch-filter', 'value'),
         Input("league-filter", "value"),
         Input("date-filter", "value"),
         prevent_initial_call=True
 )
-def update_overview(pathname, league, dates):
+def update_overview(pathname, patch, league, dates):
     if pathname != '/':
         return no_update
-    clauses, params = handle_filters(league=league, dates=dates)
-    stats_query = '''
-    SELECT 
-        COUNT(*),
+    qb = QueryBuilder()
+    qb = handle_filters(qb, patch=patch, league=league, dates=dates)
+    query, params = qb.build(
+        select='''
+            COUNT(*),
         AVG(CAST("didRadiantWin" AS INT)),
         AVG("durationSeconds")
-    FROM match_details md
-''' + clauses
-    results = db.query_select(stats_query, params=params)[0]
+        '''
+    )
+    results = db.query_select(query, params=params)[0]
     found_matches = results[0]
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
-    winrate_fig = get_top_winrate(clauses, params)
-    picked_fig = get_most_picked(clauses, params)
-    banned_fig = get_most_banned(clauses, params)
+    winrate_fig = get_top_winrate(qb.copy())
+    picked_fig = get_most_picked(qb.copy())
+    banned_fig = get_most_banned(qb.copy())
     return found_matches, radiant_win, avg_game_length, winrate_fig, picked_fig, banned_fig
 
 def stat_card(label, id):

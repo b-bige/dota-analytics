@@ -221,5 +221,14 @@ SELECT COUNT(*) FILTER (
 
 SELECT * FROM hero_pick_ban_stats;
 
+SELECT
+            COUNT(*),
+        AVG(CAST("didRadiantWin" AS INT)),
+        AVG("durationSeconds")
+
+            FROM match_details md
+            LEFT JOIN league_details ld ON md."leagueId" = ld.id LEFT JOIN patches p ON md."gameVersionId" = p.id
+            WHERE 1=1 AND ld."displayName" = 'DreamLeague Season 26' AND p.name = '7.39' AND md."startDateTimeHuman" BETWEEN 2025-05-30 AND %s
+
 --TODO Separate tables more
 

@@ -19,7 +19,7 @@ sys.path.append(CURRENT_DIR)
 from db_functions import DotaDB
 from app_functions import *
 
-from dash import Dash, html, dcc, Input, Output, State, page_container, no_update
+from dash import Dash, html, dcc, Input, Output, State, page_container, no_update, ctx
 import dash_mantine_components as dmc
 
 import logging
@@ -136,41 +136,40 @@ def toggle_navbar_visibility(pathname: str):
     return {'width': 0, 'collapsed': {'mobile': True, 'desktop': True}}
 
 @app.callback(
-        Output(component_id='date-filter', component_property='minDate'),
-        Output('date-filter', 'defaultDate'),
-        Input(component_id='league-filter', component_property='value'),
-        prevent_initial_call=True
-)
-def set_min_date(league=None):
-    min_date = get_date_boundary('MIN', league)
-    return min_date, min_date
-
-@app.callback(
-        Output(component_id='date-filter', component_property='maxDate'),
-        Input(component_id='league-filter', component_property='value'),
-        prevent_initial_call=True
-)
-def set_max_date(league=None):
-    return get_date_boundary('MAX', league)
-
-@app.callback( #TODO: Merge the above callbacks and this to one, add a helper function that deals with all the logic of updating filters
+        Output('patch-filter', 'data'),
         Output('league-filter', 'data'),
+        Output('date-filter', 'defaultDate'),
+        Output('date-filter', 'minDate'),
+        Output('date-filter', 'maxDate'),
+        Input('patch-filter', 'value'),
+        Input('league-filter', 'value'),
         Input('date-filter', 'value'),
         prevent_initial_call=True
 )
-def set_leagues(dates):
-    return get_leagues(dates)
+def update_filter_state(patch, league, dates):
+    triggered = ctx.triggered_id
+    filters = dict(patch=patch, league=league, dates=dates)
+
+    patch_data  = no_update if triggered == 'patch-filter'  else get_patches(**filters, exclude='patch')
+    league_data = no_update if triggered == 'league-filter' else get_leagues(**filters, exclude='league')
+
+    min_date     = get_date_boundary('MIN', **filters, exclude='dates')
+    max_date     = get_date_boundary('MAX', **filters, exclude='dates')
+    default_date = min_date
+    return patch_data, league_data, default_date, min_date, max_date
 
 @app.callback(
     Output("url", "search"),
     State('url', 'pathname'),
+    Input('patch-filter', 'value'),
     Input("league-filter", "value"),
     Input("date-filter", "value"),
     prevent_initial_call=True
 )
-def update_url_from_filters(pathname, league, dates):
+def update_url_from_filters(pathname, patch, league, dates):
     if pathname in ['/find-match', '/']:
         params = {}
+        if patch: params['patch'] = patch
         if league: params["league"] = league
         if dates:
             if dates[0]: params["startDate"] = dates[0]
@@ -206,28 +205,37 @@ def sync_sidebar_from_url(pathname, search):
     if pathname in ['/find-match', '/']:
         params = parse_qs(search.lstrip('?'))
         # Extract saved values
-        saved_league = params.get('league', [None])[0]
-        saved_start = params.get('startDate', [None])[0]
-        saved_end = params.get('endDate', [None])[0]
-        dates = [saved_start, saved_end]  
+        patch = params.get('patch', [None])[0]
+        league = params.get('league', [None])[0]
+        start_date = params.get('startDate', [None])[0]
+        end_date = params.get('endDate', [None])[0]
+        dates = [start_date, end_date]  
         # Return the Mantine components directly to the 'shell-navbar' in app.py
+        patch_data, league_data, min_date, max_date = get_url_data(patch=patch, league=league, dates=dates)
         return dmc.ScrollArea(
             p="md",
             children=[
                 dmc.Select(
+                    id='patch-filter',
+                    label='Game Version',
+                    data=patch_data,
+                    value=patch,
+                    searchable=True
+                ),
+                dmc.Select(
                     id='league-filter',
                     label='League',
-                    data=get_leagues(dates),
-                    value=saved_league,
+                    data=league_data,
+                    value=league,
                     searchable=True
                 ),
                 dmc.DatePicker(
                     id='date-filter',
                     type='range',
-                    minDate=get_date_boundary('MIN', saved_league),
-                    maxDate=get_date_boundary('MAX', saved_league),
+                    minDate=min_date,
+                    maxDate=max_date,
                     value=dates,
-                    defaultDate=saved_start if saved_start else None,
+                    defaultDate=start_date if start_date else None,
                     mt="md"
                 )
             ]

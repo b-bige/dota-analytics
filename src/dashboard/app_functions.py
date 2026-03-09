@@ -17,6 +17,7 @@ import logging
 import time
 
 from db_functions import DotaDB
+from query_builder import QueryBuilder
 
 db = DotaDB(schema='public')
 
@@ -26,41 +27,72 @@ def apply_fig_theme(fig: go.Figure):
     return fig
 
 ##### Basic and filter helpers
-
 def get_total_matches(clauses: str='', params=None):
     query = 'SELECT COUNT(id) FROM match_details md '
     if clauses:
         query += clauses
     return db.query_select(query, params=params)[0][0]
 
-def get_leagues(dates):
-    base_where = 'WHERE 1=1 AND ld."displayName" NOT LIKE \'?%%\' AND ld."displayName" NOT LIKE \'%%?\''
-    if dates[0]:
-        base_where, params = handle_date_filter(dates, base_where, [])
-    else:
-        params = None
-    query = f'''
-        SELECT DISTINCT ld."displayName" dn
-        FROM match_details md
-            INNER JOIN league_details ld ON md."leagueId" = ld.id 
-        {base_where} 
-        ORDER BY ld."displayName" ASC;
-    ''' #TODO clean the base_where from here
+def get_url_data(**kwargs):
+    patch_data = get_patches(**kwargs)
+    league_data = get_leagues(**kwargs)
+    min_date = get_date_boundary('MIN', **kwargs)
+    max_date = get_date_boundary('MAX', **kwargs)
+    return patch_data, league_data, min_date, max_date
+
+def get_patches(**kwargs):
+    qb = QueryBuilder()
+    qb.join('p', 'INNER JOIN patches p ON md."gameVersionId" = p.id')
+    handle_filters(qb, **kwargs)  # will skip 'p' if already joined, add 'ld' if needed
+    query, params = qb.build(
+        select='DISTINCT p.name',
+        order_by='ORDER BY p.name DESC'
+    )
+    return [result[0] for result in db.query_select(query, params=params)]
+
+def get_leagues(**kwargs):
+    qb = QueryBuilder()
+    qb.join('ld', 'INNER JOIN league_details ld ON md."leagueId" = ld.id')
+    handle_filters(qb, **kwargs)  # will skip 'ld' since already joined
+    query, params = qb.build(
+        select='DISTINCT ld."displayName"',
+        extra_conditions='ld."displayName" NOT LIKE \'?%%\'',
+        order_by='ORDER BY ld."displayName" ASC'
+    )
     leagues = [result[0] for result in db.query_select(query, params=params)]
     return leagues
 
-def get_date_boundary(boundary, league): 
-    if league:
-        query = f'''
-            SELECT {boundary}(md."startDateTimeHuman") 
-            FROM match_details md
-            INNER JOIN league_details ld
-            ON md."leagueId" = ld.id
-            WHERE ld."displayName" = %s;
-        '''
-        return db.query_select(query, params=(league, ))[0][0]
-    else:
-        return db.query_select(f'SELECT {boundary}("startDateTimeHuman") FROM match_details;')[0][0]
+def get_date_boundary(boundary, **kwargs): 
+    qb = QueryBuilder()
+    handle_filters(qb, **kwargs)
+    query, params = qb.build(
+        select=f'{boundary}(md."startDateTimeHuman")'
+    )
+    return db.query_select(query, params=params)[0][0]
+
+def handle_filters(qb: QueryBuilder, **kwargs):
+    if kwargs.get('league') and kwargs.get('exclude', None) != 'league':
+        qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
+        qb.where('ld."displayName" = %s', kwargs['league'])
+
+    if kwargs.get('patch') and kwargs.get('exclude', None) != 'patch':
+        qb.join('p', 'LEFT JOIN patches p ON md."gameVersionId" = p.id')
+        qb.where('p.name = %s', kwargs['patch'])
+
+    if kwargs.get('dates', [None])[0] and kwargs.get('exclude', None) != 'dates':
+        start, end = handle_date_filter(kwargs['dates'])
+        qb.where('md."startDateTimeHuman" BETWEEN %s AND %s', start, end)
+
+    return qb
+
+def handle_date_filter(dates):
+    if dates[0]:
+        start_date = dates[0]
+        if dates[0] and dates[1]:
+            end_date = datetime.fromisoformat(dates[1]) + timedelta(days=1)
+        else:
+            end_date = datetime.fromisoformat(dates[0]) + timedelta(days=1)
+    return [start_date, end_date]
 
 def convert_duration_format(duration: int) -> str:
     duration = round(duration)
@@ -70,197 +102,136 @@ def convert_duration_format(duration: int) -> str:
         seconds += '0'
     return minutes + ':' + seconds
 
-def handle_date_filter(dates, where=None, params=None):
-    if dates[0]:
-        where += ' AND md."startDateTimeHuman" BETWEEN %s AND %s'
-        start_date = dates[0]
-        if dates[0] and dates[1]:
-            end_date = datetime.fromisoformat(dates[1]) + timedelta(days=1)
-        else:
-            end_date = datetime.fromisoformat(dates[0]) + timedelta(days=1)
-        params.extend([start_date, end_date])
-        return where, params
-    return where, params
-
 ##### Overview graph helpers
 def get_match_ids(query, params):
     return [res[0] for res in db.query_select(query, params=params)]
 
-def handle_filters(**kwargs):
-    where = ' WHERE 1=1'
-    join = ''
-    params = []
-    if kwargs['league']:
-        where += ' AND ld."displayName" = %s'
-        join += ' LEFT JOIN league_details ld ON md."leagueId" = ld.id'
-        params.append(kwargs['league'])
-    if kwargs['dates'][0]:
-        where, params = handle_date_filter(dates=kwargs['dates'], where=where, params=params)
-    clauses = join + where
-    return clauses, params
-
-def get_most_picked(clauses, params):
-    if clauses == ' WHERE 1=1' and len(params) == 0:
+def get_most_picked(qb):
+    if not qb.is_filtered():
         results = db.query_select(
-            '''
-                SELECT picks, "displayName" 
-                FROM hero_pick_ban_stats 
-                ORDER BY picks DESC 
-                LIMIT 5
-            '''
+            '''SELECT picks, "displayName" 
+               FROM hero_pick_ban_stats 
+               ORDER BY picks DESC LIMIT 5'''
         )
     else:
-        query = f'''
-            SELECT
-                COUNT(*) FILTER (WHERE mpb."isPick" = TRUE) AS count,
-                hd."displayName"
-            FROM match_pick_bans mpb
-            JOIN hero_details hd
-            ON hd.id = mpb."heroId"
-            JOIN match_details md
-            ON md.id = mpb.match_id
-            {clauses}
-            GROUP BY hd."displayName", hd."shortName"
-            ORDER BY count DESC
-            LIMIT 5;
-        '''
-        
-        results = db.query_select(query, params=params)
-  # (count, display_name, npc_name)
-    most_picked = pd.DataFrame(results, columns=['picks', 'hero']).sort_values(by='picks')
-    picked_fig = go.Figure()
-    picked_fig.add_trace(
-        go.Bar(
-            x=most_picked['picks'],
-            y=most_picked['hero'],
-            orientation='h',
-            marker=dict(
-                color=most_picked['picks'],        # use actual values for color mapping
-                colorscale=PLOTLY_COLORSCALES['winrate'],
-                showscale=False,                  # set True if you want the colorbar
-            ),
+        qb.join('mpb', 'JOIN match_pick_bans mpb ON md.id = mpb.match_id')
+        qb.join('hd_mpb', 'JOIN hero_details hd ON hd.id = mpb."heroId"')
+        query, params = qb.build(
+            select='COUNT(*) FILTER (WHERE mpb."isPick" = TRUE) AS count, hd."displayName"',
+            extra_conditions='',
+            order_by='GROUP BY hd."displayName" ORDER BY count DESC LIMIT 5'
         )
-    )
-    picked_fig = apply_fig_theme(picked_fig)
-    picked_fig.update_layout(
+        results = db.query_select(query, params=params)
+
+    most_picked = pd.DataFrame(results, columns=['picks', 'hero']).sort_values('picks')
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=most_picked['picks'],
+        y=most_picked['hero'],
+        orientation='h',
+        marker=dict(
+            color=most_picked['picks'],
+            colorscale=PLOTLY_COLORSCALES['winrate'],
+            showscale=False,
+        ),
+    ))
+    fig = apply_fig_theme(fig)
+    fig.update_layout(
         title="Top 5 picked heroes",
         width=600,
-        xaxis=dict(title_text = 'Picks', range=[0, max(most_picked['picks']) * 1.15], showgrid=False),  # 15% breathing room
+        xaxis=dict(title_text='Picks', range=[0, max(most_picked['picks']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
-    
-    return picked_fig
+    return fig
 
-def get_most_banned(clauses, params):
-    if clauses == ' WHERE 1=1' and len(params) == 0:
+
+def get_most_banned(qb):
+    if not qb.is_filtered():
         results = db.query_select(
-            '''
-                SELECT bans, "displayName" 
-                FROM hero_pick_ban_stats 
-                ORDER BY bans DESC 
-                LIMIT 5
-            '''
+            '''SELECT bans, "displayName" 
+               FROM hero_pick_ban_stats 
+               ORDER BY bans DESC LIMIT 5'''
         )
     else:
-        query = f'''
-            SELECT
-                COUNT(*) FILTER (WHERE mpb."isPick" = FALSE) AS count,
-                hd."displayName"
-            FROM match_pick_bans mpb
-            JOIN hero_details hd
-            ON hd.id = mpb."heroId"
-            JOIN match_details md
-            ON md.id = mpb.match_id
-            {clauses}
-            GROUP BY hd."displayName", hd."shortName"
-            ORDER BY count DESC
-            LIMIT 5;
-        '''
-        results = db.query_select(query, params=params)
-    most_banned = pd.DataFrame(results, columns=['bans', 'hero']).sort_values(by='bans')
-    banned_fig = go.Figure()
-    banned_fig.add_trace(
-        go.Bar(
-            x=most_banned['bans'],
-            y=most_banned['hero'],
-            orientation='h',
-            marker=dict(
-                color=most_banned['bans'],        # use actual values for color mapping
-                colorscale=PLOTLY_COLORSCALES['winrate'],
-                showscale=False,                  # set True if you want the colorbar
-            ),
+        qb.join('mpb', 'JOIN match_pick_bans mpb ON md.id = mpb.match_id')
+        qb.join('hd_mpb', 'JOIN hero_details hd ON hd.id = mpb."heroId"')
+        query, params = qb.build(
+            select='COUNT(*) FILTER (WHERE mpb."isPick" = FALSE) AS count, hd."displayName"',
+            order_by='GROUP BY hd."displayName" ORDER BY count DESC LIMIT 5'
         )
-    )
-    banned_fig = apply_fig_theme(banned_fig)
-    banned_fig.update_layout(
+        results = db.query_select(query, params=params)
+
+    most_banned = pd.DataFrame(results, columns=['bans', 'hero']).sort_values('bans')
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=most_banned['bans'],
+        y=most_banned['hero'],
+        orientation='h',
+        marker=dict(
+            color=most_banned['bans'],
+            colorscale=PLOTLY_COLORSCALES['winrate'],
+            showscale=False,
+        ),
+    ))
+    fig = apply_fig_theme(fig)
+    fig.update_layout(
         title="Top 5 banned heroes",
         width=600,
-        xaxis=dict(title_text = 'Bans', range=[0, max(most_banned['bans']) * 1.15], showgrid=False),  # 15% breathing room
+        xaxis=dict(title_text='Bans', range=[0, max(most_banned['bans']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
-    
-    return banned_fig
+    return fig
 
-def get_top_winrate(clauses, params):
-    query = 'SELECT COUNT(md.id) FROM match_details md' + clauses
-    match_count = db.query_select(query, params=params)[0][0]
+
+def get_top_winrate(qb):
+    count_query, params = qb.build(select='COUNT(md.id)')
+    match_count = db.query_select(count_query, params=params)[0][0]
     min_picks = max(2, match_count // 10)
-    if clauses == ' WHERE 1=1' and len(params) == 0:
-        query = '''
-            SELECT winrate, picks, "displayName"
-            FROM hero_winrate_stats
-            WHERE picks >= %s
-            ORDER BY winrate DESC
-            LIMIT 5;
-        '''
-        winrates = pd.DataFrame(
-            db.query_select(query, params=(min_picks, )), #TODO reduce/clean unncessary/double lines  
-            columns=['winrate', 'picks', 'hero']
-        ).convert_dtypes().sort_values('winrate')
-    else:
-        query = f'''
-            SELECT AVG(CAST(mp."isVictory" AS INT)) AS winrate,
-                COUNT(*) as picks,
-                hd."displayName"
-            FROM match_players mp
-            JOIN hero_details hd 
-            ON mp."heroId" = hd.id
-            JOIN match_details md
-            ON mp.match_id = md.id
-            {clauses}
-            GROUP BY hd."displayName"
-            HAVING COUNT(*) >= %s
-            ORDER BY winrate DESC
-            LIMIT 5
-        '''
-        winrate_params = (*params, min_picks) if params else (min_picks, )
-        winrates = pd.DataFrame(
-            db.query_select(query, params=winrate_params), 
-            columns=['winrate', 'picks', 'hero']
-        ).convert_dtypes().sort_values('winrate')
-    winrates['winrate'] = winrates['winrate'].astype('Float32')
-    winrates['winrate'] = winrates['winrate'].round(2)
-    winrate_fig = go.Figure()
-    winrate_fig.add_trace(
-        go.Bar(
-            x=winrates['winrate'],
-            y=winrates['hero'],
-            orientation='h',
-            marker=dict(
-                color=winrates['winrate'],        # use actual values for color mapping
-                colorscale=PLOTLY_COLORSCALES['winrate'],
-                showscale=False,                  # set True if you want the colorbar
-            ),
-            customdata=winrates['picks'],
-            text=[f"{w:.0%}" for w in winrates['winrate']],
-            textposition='outside'
+
+    if not qb.is_filtered():
+        results = db.query_select(
+            '''SELECT winrate, picks, "displayName"
+               FROM hero_winrate_stats
+               WHERE picks >= %s
+               ORDER BY winrate DESC LIMIT 5''',
+            params=(min_picks,)
         )
-    )
-    winrate_fig = apply_fig_theme(winrate_fig)
-    winrate_fig.update_layout(
+    else:
+        qb.join('mp', 'JOIN match_players mp ON mp.match_id = md.id')
+        qb.join('hd', 'JOIN hero_details hd ON mp."heroId" = hd.id')
+        qb.having('COUNT(*) >= %s', min_picks)
+        query, params = qb.build(
+            select='AVG(CAST(mp."isVictory" AS INT)) AS winrate, COUNT(*) as picks, hd."displayName"',
+            group_by='GROUP BY hd."displayName"',
+            order_by='ORDER BY winrate DESC LIMIT 5'
+        )
+        results = db.query_select(query, params=params)
+
+    winrates = (pd.DataFrame(results, columns=['winrate', 'picks', 'hero'])
+                .convert_dtypes()
+                .sort_values('winrate'))
+    winrates['winrate'] = winrates['winrate'].astype('Float32').round(2)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=winrates['winrate'],
+        y=winrates['hero'],
+        orientation='h',
+        marker=dict(
+            color=winrates['winrate'],
+            colorscale=PLOTLY_COLORSCALES['winrate'],
+            showscale=False,
+        ),
+        customdata=winrates['picks'],
+        text=[f"{w:.0%}" for w in winrates['winrate']],
+        textposition='outside'
+    ))
+    fig = apply_fig_theme(fig)
+    fig.update_layout(
         title="Top 5 heroes by winrate",
         width=600,
-        xaxis=dict(title_text = 'Hero winrate', tickformat=".0%", range=[0, max(winrates['winrate']) * 1.15], showgrid=False),  # 15% breathing room
+        xaxis=dict(title_text='Hero winrate', tickformat=".0%",
+                   range=[0, max(winrates['winrate']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
-    return winrate_fig
+    return fig

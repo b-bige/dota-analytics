@@ -59,41 +59,44 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         State('url', 'pathname'),
         State('url', 'search'),
         Input('match-pagination', 'value'),
+        Input('patch-filter', 'value'),
         Input(component_id='league-filter', component_property='value'),
         Input(component_id='date-filter', component_property='value'),
         prevent_initial_call=True
 )
-def update_match_container_and_pages(pathname, search, page_number, league, dates): #TODO: Add pagination
+def update_match_container_and_pages(pathname, search, page_number, patch, league, dates): #TODO: Add pagination
     triggered = ctx.triggered_id
     if pathname != '/find-match':
         return no_update
     PAGE_SIZE = 20
-    clauses, params = handle_filters(league=league, dates=dates)
-    total_records = get_total_matches(clauses, params=params) #TODO maybe redundant?
+    qb = QueryBuilder()
+    qb = handle_filters(qb, patch=patch, league=league, dates=dates)
+    query, params = qb.build(select='COUNT(md.id)')
+    total_records = db.query_select(query, params=params)[0][0]
     total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
-    if triggered in ('league-filter', 'date-filter'):
+    if triggered != 'match-pagination':
         url_params = parse_qs(search.lstrip('?'))
+        url_patch = url_params.get('patch', [None])[0]
         url_league = url_params.get('league', [None])[0]
         url_start = url_params.get('startDate', [None])[0]
         url_end = url_params.get('endDate', [None])[0]
 
         # Only reset if the filter change didn't come from the URL sync
-        filter_matches_url = (league == url_league) and (dates == [url_start, url_end])
+        filter_matches_url = (patch == url_patch) and (league == url_league) and (dates == [url_start, url_end])
         page_number = 1 if not filter_matches_url or page_number > total_pages else page_number
     offset = (int(page_number) - 1) * PAGE_SIZE
-    query = f'''
-        SELECT md.id, md."radiantTeamId", md."direTeamId", 
-        md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman",
-        radiant.name, dire.name, radiant.logo, dire.logo, l."displayName"
-        FROM match_details md
-        LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"
-        LEFT JOIN team_details dire ON dire.id = md."direTeamId"
-        LEFT JOIN league_details l ON l.id = md."leagueId"
-        {clauses}
-        ORDER BY md."startDateTimeHuman" ASC
-        LIMIT %s OFFSET %s
-    ''' #TODO Make sorting features
-    data_params = params + [PAGE_SIZE, offset]
+    qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
+    qb.join('dire', 'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
+    qb.join('ld', 'LEFT JOIN league_details ld ON ld.id = md."leagueId"')
+    query, params = qb.build(
+        select='''
+            md.id, md."radiantTeamId", md."direTeamId", 
+            md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman",
+            radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName"
+        ''',
+        order_by='ORDER BY md."startDateTimeHuman" ASC LIMIT %s OFFSET %s',
+        params=[PAGE_SIZE, offset]
+    )
     columns=[
         'match_id', 
         'radiant_team_id',
@@ -109,7 +112,7 @@ def update_match_container_and_pages(pathname, search, page_number, league, date
     ]
     matches = [dict(zip(columns, md)) for md in db.query_select(
         query=query,
-        params=data_params
+        params=params
     )]          
     elements = [create_match_element(row) for row in matches]
         
