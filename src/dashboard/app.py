@@ -163,50 +163,48 @@ def update_filter_state(patch, league, teams, dates):
     return patch_data, league_data, teams_data, default_date, min_date, max_date
 
 @app.callback(
-    Output("url", "search"),
+    Output("url", "search", allow_duplicate=True),
     State('url', 'pathname'),
-    State('match-pagination', 'value'),
     Input('patch-filter', 'value'),
     Input("league-filter", "value"),
     Input('teams-filter', 'value'),
     Input("date-filter", "value"),
     prevent_initial_call=True
 )
-def update_url_from_filters(pathname, page_number, patch, league, teams, dates):
-    if pathname in ['/find-match', '/']:
-        params = {}
-        if page_number: params["page"] = page_number
-        if patch: params['patch'] = patch
-        if league: params["league"] = league
-        if teams: params['teams'] = teams
-        if dates:
-            if dates[0]: params["startDate"] = dates[0]
-            if dates[1]: params["endDate"] = dates[1]
-        return f"?{urlencode(params, doseq=True)}" if params else ""
-    return no_update
+def update_url_from_filters_overview(pathname, patch, league, teams, dates):
+    if pathname != '/':
+        return no_update
+    params = {}
+    if patch: params['patch'] = patch
+    if league: params["league"] = league
+    if teams: params['teams'] = teams
+    if dates:
+        if dates[0]: params["startDate"] = dates[0]
+        if dates[1]: params["endDate"] = dates[1]
+    return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(
     Output("url", "search", allow_duplicate=True),
     State('url', 'pathname'),
+    Input('patch-filter', 'value'),
+    Input("league-filter", "value"),
+    Input('teams-filter', 'value'),
+    Input("date-filter", "value"),
     Input('match-pagination', 'value'),
-    State('patch-filter', 'value'),
-    State("league-filter", "value"),
-    State('teams-filter', 'value'),
-    State("date-filter", "value"),
     prevent_initial_call=True
 )
-def update_url_from_pagination(pathname, page_number, patch, teams, league, dates):
-    if pathname == '/find-match':
-        params = {}
-        if page_number: params["page"] = page_number
-        if patch: params['patch'] = patch
-        if league: params["league"] = league
-        if teams: params['teams'] = teams
-        if dates:
-            if dates[0]: params["startDate"] = dates[0]
-            if dates[1]: params["endDate"] = dates[1]
-        return f"?{urlencode(params, doseq=True)}" if params else ""
-    return no_update
+def update_url_from_filters_find_match(pathname, patch, league, teams, dates, page_number):
+    if pathname != '/find-match':
+        return no_update
+    params = {}
+    if page_number: params["page"] = page_number
+    if patch: params['patch'] = patch
+    if league: params["league"] = league
+    if teams: params['teams'] = teams
+    if dates:
+        if dates[0]: params["startDate"] = dates[0]
+        if dates[1]: params["endDate"] = dates[1]
+    return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(
     Output('shell-navbar', 'children'),

@@ -34,6 +34,16 @@ def layout(**kwargs):
             ]
         ),
         html.Div(
+            id='error-card',
+            style={
+                "display": "flex",
+                "width": "100%",
+                'alignItems': 'flex-start',
+                'height': '0px'
+            },
+            children=[]
+        ),
+        html.Div(
             style={
                 "display": "flex",
                 "width": "100%",
@@ -75,6 +85,37 @@ def layout(**kwargs):
     ]
 
 @callback(
+        Output('error-card', 'children'),
+        Output('error-card', 'style'),
+        Input('top-five-hero-winrate', 'figure')
+)
+def show_error(figure):
+    if figure == None:
+        style={
+                "display": "flex",
+                "width": "100%",
+                'alignItems': 'flex-start',
+                'height': '100px'
+        }
+        paper = dmc.Paper(
+            withBorder=True,
+            p='lg',
+            w=200,
+            children=[
+                dmc.Text('Error: either no games found or problem with query', size='xs', c='dimmed', fw=700, tt="uppercase"),
+            ]
+        )
+        return paper, style
+    else:
+        style={
+                "display": "flex",
+                "width": "100%",
+                'alignItems': 'flex-start',
+                'height': '0px'
+        }
+        return [], style
+
+@callback(
         Output('total-matches', 'children'),
         Output('stat-radiant-win', 'children'),
         Output('stat-avg-duration', 'children'),
@@ -104,12 +145,18 @@ def update_overview(pathname, patch, league, teams, dates):
     found_matches = results[0]
     if found_matches == 0:
         return found_matches, 0, 0, None, None, None
+    if len(results) == 0:
+        return 0, 0, 0, None, None, None
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
-    winrate_fig = get_top_winrate(qb.copy())
-    picked_fig = get_most_picked(qb.copy())
-    banned_fig = get_most_banned(qb.copy())
-    return found_matches, radiant_win, avg_game_length, winrate_fig, picked_fig, banned_fig
+    try:
+        winrate_fig = get_top_winrate(qb.copy())
+        picked_fig = get_most_picked(qb.copy())
+        banned_fig = get_most_banned(qb.copy())
+        return found_matches, radiant_win, avg_game_length, winrate_fig, picked_fig, banned_fig
+    except:
+
+        return found_matches, radiant_win, avg_game_length, None, None, None
 
 def stat_card(label, id):
     return dmc.Paper(

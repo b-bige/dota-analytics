@@ -57,7 +57,6 @@ class QueryBuilder:
             {having}
             {order_by}
         '''
-        print(query, )
         return query, self._params + self._having_params + extra_params
     
     def is_filtered(self):
