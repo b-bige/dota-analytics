@@ -138,62 +138,74 @@ def toggle_navbar_visibility(pathname: str):
 @app.callback(
         Output('patch-filter', 'data'),
         Output('league-filter', 'data'),
+        Output('teams-filter', 'data'),
         Output('date-filter', 'defaultDate'),
         Output('date-filter', 'minDate'),
         Output('date-filter', 'maxDate'),
         Input('patch-filter', 'value'),
         Input('league-filter', 'value'),
+        Input('teams-filter', 'value'),
         Input('date-filter', 'value'),
         prevent_initial_call=True
 )
-def update_filter_state(patch, league, dates):
+def update_filter_state(patch, league, teams, dates):
     triggered = ctx.triggered_id
-    filters = dict(patch=patch, league=league, dates=dates)
+    filters = dict(patch=patch, league=league, teams=teams, dates=dates)
+    #TODO: Add dynamic filter building from a CONSTANT, and add dynamic disabledDates to the filters when a team is selected
 
     patch_data  = no_update if triggered == 'patch-filter'  else get_patches(**filters, exclude='patch')
     league_data = no_update if triggered == 'league-filter' else get_leagues(**filters, exclude='league')
+    teams_data = no_update if triggered == 'teams-filter' else get_teams(**filters, exclude='teams')
 
     min_date     = get_date_boundary('MIN', **filters, exclude='dates')
     max_date     = get_date_boundary('MAX', **filters, exclude='dates')
     default_date = min_date
-    return patch_data, league_data, default_date, min_date, max_date
+    return patch_data, league_data, teams_data, default_date, min_date, max_date
 
 @app.callback(
     Output("url", "search"),
     State('url', 'pathname'),
+    State('match-pagination', 'value'),
     Input('patch-filter', 'value'),
     Input("league-filter", "value"),
+    Input('teams-filter', 'value'),
     Input("date-filter", "value"),
     prevent_initial_call=True
 )
-def update_url_from_filters(pathname, patch, league, dates):
+def update_url_from_filters(pathname, page_number, patch, league, teams, dates):
     if pathname in ['/find-match', '/']:
         params = {}
+        if page_number: params["page"] = page_number
         if patch: params['patch'] = patch
         if league: params["league"] = league
+        if teams: params['teams'] = teams
         if dates:
             if dates[0]: params["startDate"] = dates[0]
             if dates[1]: params["endDate"] = dates[1]
-        return f"?{urlencode(params)}" if params else ""
+        return f"?{urlencode(params, doseq=True)}" if params else ""
     return no_update
 
 @app.callback(
     Output("url", "search", allow_duplicate=True),
     State('url', 'pathname'),
     Input('match-pagination', 'value'),
+    State('patch-filter', 'value'),
     State("league-filter", "value"),
+    State('teams-filter', 'value'),
     State("date-filter", "value"),
     prevent_initial_call=True
 )
-def update_url_from_pagination(pathname, page_number, league, dates):
+def update_url_from_pagination(pathname, page_number, patch, teams, league, dates):
     if pathname == '/find-match':
         params = {}
         if page_number: params["page"] = page_number
+        if patch: params['patch'] = patch
         if league: params["league"] = league
+        if teams: params['teams'] = teams
         if dates:
             if dates[0]: params["startDate"] = dates[0]
             if dates[1]: params["endDate"] = dates[1]
-        return f"?{urlencode(params)}" if params else ""
+        return f"?{urlencode(params, doseq=True)}" if params else ""
     return no_update
 
 @app.callback(
@@ -207,17 +219,20 @@ def sync_sidebar_from_url(pathname, search):
         # Extract saved values
         patch = params.get('patch', [None])[0]
         league = params.get('league', [None])[0]
+        teams = params.get('teams', None)
         start_date = params.get('startDate', [None])[0]
         end_date = params.get('endDate', [None])[0]
         dates = [start_date, end_date]  
         # Return the Mantine components directly to the 'shell-navbar' in app.py
-        patch_data, league_data, min_date, max_date = get_url_data(patch=patch, league=league, dates=dates)
+        patch_data, league_data, teams_data, min_date, max_date = get_url_data(patch=patch, league=league, teams=teams, dates=dates)
+
         return dmc.ScrollArea(
             p="md",
             children=[
                 dmc.Select(
                     id='patch-filter',
                     label='Game Version',
+                    placeholder='Select Game Version',
                     data=patch_data,
                     value=patch,
                     searchable=True
@@ -225,8 +240,17 @@ def sync_sidebar_from_url(pathname, search):
                 dmc.Select(
                     id='league-filter',
                     label='League',
+                    placeholder='Select League',
                     data=league_data,
                     value=league,
+                    searchable=True
+                ),
+                dmc.MultiSelect(
+                    id='teams-filter',
+                    label='Pro teams',
+                    placeholder='Select 2 teams To See Head-to-Head',
+                    data=teams_data,
+                    value=teams,
                     searchable=True
                 ),
                 dmc.DatePicker(

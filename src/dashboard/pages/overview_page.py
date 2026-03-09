@@ -84,14 +84,15 @@ def layout(**kwargs):
         State('url', 'pathname'),
         Input('patch-filter', 'value'),
         Input("league-filter", "value"),
+        Input('teams-filter', 'value'),
         Input("date-filter", "value"),
         prevent_initial_call=True
 )
-def update_overview(pathname, patch, league, dates):
+def update_overview(pathname, patch, league, teams, dates):
     if pathname != '/':
         return no_update
     qb = QueryBuilder()
-    qb = handle_filters(qb, patch=patch, league=league, dates=dates)
+    qb = handle_filters(qb, patch=patch, league=league, teams=teams, dates=dates)
     query, params = qb.build(
         select='''
             COUNT(*),

@@ -34,16 +34,20 @@ class QueryBuilder:
         self._having_params.extend(params)
         return self
 
-    def build(self, select, group_by='', order_by='', extra_conditions='', params=[]):
+    def build(self, select, group_by='', order_by='', extra_conditions='', extra_params=None):
+        extra_params = extra_params or []
         joins = ' '.join(self._joins.values())
+
         where = 'WHERE 1=1'
         if self._conditions:
-            where += ' AND ' + ' AND '.join(self._conditions)
+            where += ' AND ' + ' AND '.join(f'({c})' for c in self._conditions)
         if extra_conditions:
-            where += f' AND {extra_conditions}'
+            where += f' AND ({extra_conditions})'  # wrap extra_conditions too
+
         having = ''
         if self._having:
-            having = 'HAVING ' + ' AND '.join(self._having)
+            having = 'HAVING ' + ' AND '.join(f'({h})' for h in self._having)  # wrap having too
+
         query = f'''
             SELECT {select}
             FROM {self.base_table}
@@ -53,7 +57,8 @@ class QueryBuilder:
             {having}
             {order_by}
         '''
-        return query, self._params + self._having_params + params
+        print(query, )
+        return query, self._params + self._having_params + extra_params
     
     def is_filtered(self):
         """True if any filters have been applied"""

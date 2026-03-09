@@ -230,5 +230,7 @@ SELECT
             LEFT JOIN league_details ld ON md."leagueId" = ld.id LEFT JOIN patches p ON md."gameVersionId" = p.id
             WHERE 1=1 AND ld."displayName" = 'DreamLeague Season 26' AND p.name = '7.39' AND md."startDateTimeHuman" BETWEEN 2025-05-30 AND %s
 
+SELECT * FROM team_details WHERE "isPro" = 't';
+
 --TODO Separate tables more
 

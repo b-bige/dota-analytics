@@ -61,16 +61,17 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         Input('match-pagination', 'value'),
         Input('patch-filter', 'value'),
         Input(component_id='league-filter', component_property='value'),
+        Input('teams-filter', 'value'),
         Input(component_id='date-filter', component_property='value'),
         prevent_initial_call=True
 )
-def update_match_container_and_pages(pathname, search, page_number, patch, league, dates): #TODO: Add pagination
+def update_match_container_and_pages(pathname, search, page_number, patch, league, teams, dates): #TODO: Add pagination
     triggered = ctx.triggered_id
     if pathname != '/find-match':
         return no_update
     PAGE_SIZE = 20
     qb = QueryBuilder()
-    qb = handle_filters(qb, patch=patch, league=league, dates=dates)
+    qb = handle_filters(qb, patch=patch, league=league, teams=teams, dates=dates)
     query, params = qb.build(select='COUNT(md.id)')
     total_records = db.query_select(query, params=params)[0][0]
     total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
@@ -95,7 +96,7 @@ def update_match_container_and_pages(pathname, search, page_number, patch, leagu
             radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName"
         ''',
         order_by='ORDER BY md."startDateTimeHuman" ASC LIMIT %s OFFSET %s',
-        params=[PAGE_SIZE, offset]
+        extra_params=[PAGE_SIZE, offset]
     )
     columns=[
         'match_id', 

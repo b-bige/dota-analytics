@@ -36,9 +36,27 @@ def get_total_matches(clauses: str='', params=None):
 def get_url_data(**kwargs):
     patch_data = get_patches(**kwargs)
     league_data = get_leagues(**kwargs)
+    teams_data = get_teams(**kwargs)
     min_date = get_date_boundary('MIN', **kwargs)
     max_date = get_date_boundary('MAX', **kwargs)
-    return patch_data, league_data, min_date, max_date
+    return patch_data, league_data, teams_data, min_date, max_date
+
+def get_teams(**kwargs):
+    qb = QueryBuilder()
+    qb.join('tdr', 'INNER JOIN team_details tdr ON tdr.id = md."radiantTeamId"')
+    qb.join('tdd', 'INNER JOIN team_details tdd ON tdd.id = md."direTeamId"')
+    qb.where('tdr."isPro" = \'t\' AND tdd."isPro" = \'t\'')
+    handle_filters(qb, **kwargs)
+    q1, params1 = qb.build(select='DISTINCT tdr.name')
+    q2, params2 = qb.copy().build(select='DISTINCT tdd.name')
+
+    query = f'''
+        {q1}
+        UNION
+        {q2}
+        ORDER BY name ASC
+    '''
+    return [r[0] for r in db.query_select(query, params=params1 + params2)]
 
 def get_patches(**kwargs):
     qb = QueryBuilder()
@@ -79,15 +97,28 @@ def handle_filters(qb: QueryBuilder, **kwargs):
         qb.join('p', 'LEFT JOIN patches p ON md."gameVersionId" = p.id')
         qb.where('p.name = %s', kwargs['patch'])
 
+    if kwargs.get('teams') and kwargs.get('exclude', None) != 'teams':
+        teams = kwargs.get('teams')
+        if teams[0]:
+            qb.join('tdr', 'LEFT JOIN team_details tdr ON tdr.id = md."radiantTeamId"')
+            qb.join('tdd', 'LEFT JOIN team_details tdd ON tdd.id = md."direTeamId"')
+            if len(teams) == 2:
+                qb.where(
+                    '(tdr.name = %s AND tdd.name = %s) OR (tdr.name = %s AND tdd.name = %s)',
+                    teams[0], teams[1], teams[1], teams[0]
+                )
+            else:
+                qb.where('(tdr.name = ANY(%s)) OR (tdd.name = ANY(%s))', teams, teams)
+
     if kwargs.get('dates', [None])[0] and kwargs.get('exclude', None) != 'dates':
+
         start, end = handle_date_filter(kwargs['dates'])
         qb.where('md."startDateTimeHuman" BETWEEN %s AND %s', start, end)
-
     return qb
 
 def handle_date_filter(dates):
     if dates[0]:
-        start_date = dates[0]
+        start_date = datetime.fromisoformat(dates[0])
         if dates[0] and dates[1]:
             end_date = datetime.fromisoformat(dates[1]) + timedelta(days=1)
         else:
