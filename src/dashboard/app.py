@@ -27,6 +27,7 @@ from basic_logger import setup_logger
 import time
 
 from theme import *
+from filters import *
 
 db = DotaDB(schema='public')
 setup_logger(logfile_path='logs/dashboard_app.log')
@@ -136,74 +137,86 @@ def toggle_navbar_visibility(pathname: str):
     return {'width': 0, 'collapsed': {'mobile': True, 'desktop': True}}
 
 @app.callback(
+        Output('teams-filter', 'placeholder'),
         Output('patch-filter', 'data'),
         Output('league-filter', 'data'),
         Output('teams-filter', 'data'),
         Output('date-filter', 'defaultDate'),
         Output('date-filter', 'minDate'),
         Output('date-filter', 'maxDate'),
-        Input('patch-filter', 'value'),
-        Input('league-filter', 'value'),
-        Input('teams-filter', 'value'),
-        Input('date-filter', 'value'),
+        *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
-def update_filter_state(patch, league, teams, dates):
+def update_filter_state(*args):
     triggered = ctx.triggered_id
-    filters = dict(patch=patch, league=league, teams=teams, dates=dates)
-    #TODO: Add dynamic filter building from a CONSTANT, and add dynamic disabledDates to the filters when a team is selected
+    filters = {
+        filter_name: ctx.inputs.get(f'{component_id}.value')
+        for filter_name, component_id in FILTER_IDS.items()
+    }
 
-    patch_data  = no_update if triggered == 'patch-filter'  else get_patches(**filters, exclude='patch')
-    league_data = no_update if triggered == 'league-filter' else get_leagues(**filters, exclude='league')
-    teams_data = no_update if triggered == 'teams-filter' else get_teams(**filters, exclude='teams')
-
-    min_date     = get_date_boundary('MIN', **filters, exclude='dates')
-    max_date     = get_date_boundary('MAX', **filters, exclude='dates')
-    default_date = min_date
-    return patch_data, league_data, teams_data, default_date, min_date, max_date
+    data = []
+    for filter_name, component_id in FILTER_IDS.items():
+        if filter_name == 'dates':
+            min_date = get_date_boundary('MIN', **filters, exclude='dates')
+            max_date = get_date_boundary('MAX', **filters, exclude='dates')
+            default_date = min_date
+            data.extend([default_date, min_date, max_date])
+        else:
+            data.append(no_update if triggered == component_id else get_filter_data(filter_name, **filters, exclude=filter_name))
+    try:
+        if len(data[2]) == 0:
+            teams_placeholder = 'No Pro Teams Found'
+        else:
+            teams_placeholder = 'Select 2 To See Head-to-Head'
+    except:
+        teams_placeholder = no_update
+    data.insert(0, teams_placeholder)
+    return tuple(data)
 
 @app.callback(
     Output("url", "search", allow_duplicate=True),
     State('url', 'pathname'),
-    Input('patch-filter', 'value'),
-    Input("league-filter", "value"),
-    Input('teams-filter', 'value'),
-    Input("date-filter", "value"),
+    *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
     prevent_initial_call=True
 )
 def update_url_from_filters_overview(pathname, patch, league, teams, dates):
     if pathname != '/':
         return no_update
     params = {}
-    if patch: params['patch'] = patch
-    if league: params["league"] = league
-    if teams: params['teams'] = teams
-    if dates:
-        if dates[0]: params["startDate"] = dates[0]
-        if dates[1]: params["endDate"] = dates[1]
+    for filter_name, component_id in FILTER_IDS.items():
+        filter_value = ctx.inputs.get(f'{component_id}.value')
+        if filter_value:
+            if filter_name == 'dates':
+                if filter_value[0] != None:
+                    params['startDate'] = filter_value[0]
+                    if filter_value[1]:
+                        params['endDate'] = filter_value[1]
+            else:
+                params[filter_name] = filter_value
     return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(
     Output("url", "search", allow_duplicate=True),
     State('url', 'pathname'),
-    Input('patch-filter', 'value'),
-    Input("league-filter", "value"),
-    Input('teams-filter', 'value'),
-    Input("date-filter", "value"),
     Input('match-pagination', 'value'),
+    *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
     prevent_initial_call=True
 )
-def update_url_from_filters_find_match(pathname, patch, league, teams, dates, page_number):
+def update_url_from_filters_find_match(pathname, page_number, *args):
     if pathname != '/find-match':
         return no_update
     params = {}
-    if page_number: params["page"] = page_number
-    if patch: params['patch'] = patch
-    if league: params["league"] = league
-    if teams: params['teams'] = teams
-    if dates:
-        if dates[0]: params["startDate"] = dates[0]
-        if dates[1]: params["endDate"] = dates[1]
+    if page_number: params['page'] = page_number
+    for filter_name, component_id in FILTER_IDS.items():
+        filter_value = ctx.inputs.get(f'{component_id}.value')
+        if filter_value:
+            if filter_name == 'dates':
+                if filter_value[0] != None:
+                    params['startDate'] = filter_value[0]
+                    if filter_value[1]:
+                        params['endDate'] = filter_value[1]
+            else:
+                params[filter_name] = filter_value
     return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(
@@ -214,16 +227,17 @@ def update_url_from_filters_find_match(pathname, patch, league, teams, dates, pa
 def sync_sidebar_from_url(pathname, search):
     if pathname in ['/find-match', '/']:
         params = parse_qs(search.lstrip('?'))
-        # Extract saved values
-        patch = params.get('patch', [None])[0]
-        league = params.get('league', [None])[0]
-        teams = params.get('teams', None)
-        start_date = params.get('startDate', [None])[0]
-        end_date = params.get('endDate', [None])[0]
-        dates = [start_date, end_date]  
-        # Return the Mantine components directly to the 'shell-navbar' in app.py
-        patch_data, league_data, teams_data, min_date, max_date = get_url_data(patch=patch, league=league, teams=teams, dates=dates)
-
+        filters = {}
+        for filter_name in FILTER_IDS.keys():
+            if filter_name == 'dates':
+                start_date = params.get('startDate', [None])[0]
+                end_date = params.get('endDate', [None])[0]
+                dates = [start_date, end_date]
+                filters[filter_name] = dates
+            else:
+                filters[filter_name] = params.get(filter_name, [None])[0]
+        patch_data, league_data, teams_data, min_date, max_date = get_url_data(params=params, **filters) #TODO Optimize this passing
+        teams_placeholder = 'Select 2 To See Head-to-Head' if len(teams_data) > 0 else 'No Pro Teams Found'
         return dmc.ScrollArea(
             p="md",
             children=[
@@ -232,7 +246,7 @@ def sync_sidebar_from_url(pathname, search):
                     label='Game Version',
                     placeholder='Select Game Version',
                     data=patch_data,
-                    value=patch,
+                    value=params.get('patch', [None])[0],
                     searchable=True
                 ),
                 dmc.Select(
@@ -240,15 +254,15 @@ def sync_sidebar_from_url(pathname, search):
                     label='League',
                     placeholder='Select League',
                     data=league_data,
-                    value=league,
+                    value=params.get('league', [None])[0],
                     searchable=True
                 ),
                 dmc.MultiSelect(
                     id='teams-filter',
                     label='Pro teams',
-                    placeholder='Select 2 To See Head-to-Head',
+                    placeholder=teams_placeholder,
                     data=teams_data,
-                    value=teams,
+                    value=params.get('teams', None),
                     searchable=True
                 ),
                 dmc.DatePicker(
@@ -257,7 +271,7 @@ def sync_sidebar_from_url(pathname, search):
                     minDate=min_date,
                     maxDate=max_date,
                     value=dates,
-                    defaultDate=start_date if start_date else None,
+                    defaultDate=start_date,
                     mt="md"
                 )
             ]

@@ -33,13 +33,29 @@ def get_total_matches(clauses: str='', params=None):
         query += clauses
     return db.query_select(query, params=params)[0][0]
 
-def get_url_data(**kwargs):
-    patch_data = get_patches(**kwargs)
-    league_data = get_leagues(**kwargs)
-    teams_data = get_teams(**kwargs)
-    min_date = get_date_boundary('MIN', **kwargs)
-    max_date = get_date_boundary('MAX', **kwargs)
-    return patch_data, league_data, teams_data, min_date, max_date
+def get_url_data(params:dict, **kwargs):
+    data = []
+    for filter_name in kwargs.keys():
+        match filter_name:
+            case 'patch': #TODO omptimal way to check this?
+                data.append(get_patches(**kwargs, exclude=filter_name if params.get(filter_name, None) else None))
+            case 'league':
+                data.append(get_leagues(**kwargs, exclude=filter_name if params.get(filter_name, None) else None))
+            case 'teams':
+                data.append(get_teams(**kwargs, exclude=filter_name if params.get(filter_name, None) else None))
+    data.append(get_date_boundary('MIN', **kwargs, exclude='dates'))
+    data.append(get_date_boundary('MAX', **kwargs, exclude='dates'))
+    return tuple(data)
+
+def get_filter_data(filter:str, **kwargs):
+    match filter:
+        case 'patch':
+            return get_patches(**kwargs)
+        case 'league':
+            return get_leagues(**kwargs)
+        case 'teams':
+            return get_teams(**kwargs)
+    
 
 def get_teams(**kwargs):
     qb = QueryBuilder()

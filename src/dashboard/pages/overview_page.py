@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State, no_update
+from dash import html, dcc, callback, Input, Output, State, no_update, ctx
 import dash_mantine_components as dmc
 import plotly.express as px
 import plotly.graph_objects as go
@@ -10,6 +10,7 @@ import logging
 from theme import PLOTLY_COLORSCALES, COLORS
 
 from app_functions import *
+from filters import *
 
 dash.register_page(__name__, path='')
 
@@ -123,17 +124,18 @@ def show_error(figure):
         Output('top-five-picked', 'figure'),
         Output('top-five-banned', 'figure'),
         State('url', 'pathname'),
-        Input('patch-filter', 'value'),
-        Input("league-filter", "value"),
-        Input('teams-filter', 'value'),
-        Input("date-filter", "value"),
+        *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
-def update_overview(pathname, patch, league, teams, dates):
+def update_overview(pathname, *args):
     if pathname != '/':
         return no_update
+    filters = {
+        filter_name: ctx.inputs.get(f'{component_id}.value')
+        for filter_name, component_id in FILTER_IDS.items()
+    }
     qb = QueryBuilder()
-    qb = handle_filters(qb, patch=patch, league=league, teams=teams, dates=dates)
+    qb = handle_filters(qb, **filters)
     query, params = qb.build(
         select='''
             COUNT(*),

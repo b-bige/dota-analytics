@@ -14,6 +14,7 @@ sys.path.append(DASHBOARD_DIR)
 sys.path.append(SRC_DIR)
 
 from app_functions import *
+from filters import *
 
 vs_logo = dmc.Avatar(
     "VS",
@@ -59,19 +60,20 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         State('url', 'pathname'),
         State('url', 'search'),
         Input('match-pagination', 'value'),
-        Input('patch-filter', 'value'),
-        Input(component_id='league-filter', component_property='value'),
-        Input('teams-filter', 'value'),
-        Input(component_id='date-filter', component_property='value'),
+        *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
-def update_match_container_and_pages(pathname, search, page_number, patch, league, teams, dates): #TODO: Add pagination
-    triggered = ctx.triggered_id
+def update_match_container_and_pages(pathname, search, page_number, *args): #TODO: Add pagination
     if pathname != '/find-match':
         return no_update
+    triggered = ctx.triggered_id
+    filters = {
+        filter_name: ctx.inputs.get(f'{component_id}.value')
+        for filter_name, component_id in FILTER_IDS.items()
+    }
     PAGE_SIZE = 20
     qb = QueryBuilder()
-    qb = handle_filters(qb, patch=patch, league=league, teams=teams, dates=dates)
+    qb = handle_filters(qb, **filters)
     query, params = qb.build(select='COUNT(md.id)')
     total_records = db.query_select(query, params=params)[0][0]
     total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
@@ -83,7 +85,7 @@ def update_match_container_and_pages(pathname, search, page_number, patch, leagu
         url_end = url_params.get('endDate', [None])[0]
 
         # Only reset if the filter change didn't come from the URL sync
-        filter_matches_url = (patch == url_patch) and (league == url_league) and (dates == [url_start, url_end])
+        filter_matches_url = (filters['patch'] == url_patch) and (filters['league'] == url_league) and (filters['dates'] == [url_start, url_end])
         page_number = 1 if not filter_matches_url or page_number > total_pages else page_number
     offset = (int(page_number) - 1) * PAGE_SIZE
     qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
