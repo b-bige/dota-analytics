@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 class QueryBuilder:
     def __init__(self, base_table='match_details md'):
         self.base_table = base_table

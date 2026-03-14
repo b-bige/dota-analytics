@@ -131,11 +131,11 @@ def update_overview(pathname, *args):
     if pathname != '/':
         return no_update
     filters = {
-        filter_name: ctx.inputs.get(f'{component_id}.value')
-        for filter_name, component_id in FILTER_IDS.items()
+        f.filter_name: ctx.inputs.get(f'{f.component_id}.value')
+        for f in FILTERS
     }
     qb = QueryBuilder()
-    qb = handle_filters(qb, **filters)
+    qb = Filter.handle_filters(qb, **filters)
     query, params = qb.build(
         select='''
             COUNT(*),

@@ -68,59 +68,52 @@ def update_match_container_and_pages(pathname, search, page_number, *args): #TOD
         return no_update
     triggered = ctx.triggered_id
     filters = {
-        filter_name: ctx.inputs.get(f'{component_id}.value')
-        for filter_name, component_id in FILTER_IDS.items()
+        f.filter_name: ctx.inputs.get(f'{f.component_id}.value')
+        for f in FILTERS
     }
+    
     PAGE_SIZE = 20
     qb = QueryBuilder()
-    qb = handle_filters(qb, **filters)
+    Filter.handle_filters(qb, **filters)
     query, params = qb.build(select='COUNT(md.id)')
     total_records = db.query_select(query, params=params)[0][0]
-    total_pages = (total_records // PAGE_SIZE) + (1 if total_records % PAGE_SIZE > 0 else 0)
+    total_pages = -(-total_records // PAGE_SIZE)  # ceiling division
+
+    # check if page should reset
     if triggered != 'match-pagination':
         url_params = parse_qs(search.lstrip('?'))
-        url_patch = url_params.get('patch', [None])[0]
-        url_league = url_params.get('league', [None])[0]
-        url_start = url_params.get('startDate', [None])[0]
-        url_end = url_params.get('endDate', [None])[0]
-        url_min_duration = url_params.get('startDuration', [None])[0]
-        url_max_duration = url_params.get('endDuration', [None])[0]
-
-        # Only reset if the filter change didn't come from the URL sync
-        filter_matches_url = (filters['patch'] == url_patch) and (filters['league'] == url_league) and (filters['dates'] == [url_start, url_end] and filters['durations'] == [url_min_duration, url_max_duration])
+        url_filters = {
+            f.filter_name: f.parse_from_url(url_params)
+            for f in FILTERS
+        }
+        filter_matches_url = all(
+            filters[f.filter_name] == url_filters[f.filter_name]
+            for f in FILTERS
+        )
         page_number = 1 if not filter_matches_url or page_number > total_pages else page_number
+
     offset = (int(page_number) - 1) * PAGE_SIZE
     qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
-    qb.join('dire', 'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
-    qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
+    qb.join('dire',    'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
+    qb.join('ld',      'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
+
     query, params = qb.build(
         select='''
-            md.id, md."radiantTeamId", md."direTeamId", 
+            md.id, md."radiantTeamId", md."direTeamId",
             md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman",
             radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName"
         ''',
         order_by='ORDER BY md."startDateTimeHuman" ASC LIMIT %s OFFSET %s',
         extra_params=[PAGE_SIZE, offset]
     )
-    columns=[
-        'match_id', 
-        'radiant_team_id',
-        'dire_team_id',
-        'radiant_win', 
-        'duration',
-        'start_date',
-        'radiant_name',
-        'dire_name', 
-        'radiant_logo',
-        'dire_logo',
-        'league_name'
+
+    columns = [
+        'match_id', 'radiant_team_id', 'dire_team_id',
+        'radiant_win', 'duration', 'start_date',
+        'radiant_name', 'dire_name', 'radiant_logo', 'dire_logo', 'league_name'
     ]
-    matches = [dict(zip(columns, md)) for md in db.query_select(
-        query=query,
-        params=params
-    )]          
+    matches = [dict(zip(columns, row)) for row in db.query_select(query, params=params)]
     elements = [create_match_element(row) for row in matches]
-        
     return elements, total_pages, page_number
     
 

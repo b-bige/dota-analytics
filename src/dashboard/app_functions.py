@@ -17,7 +17,7 @@ import logging
 import time
 
 from db_functions import DotaDB
-from query_builder import QueryBuilder
+from dashboard.query_builder import *
 from dashboard.filters import *
 
 db = DotaDB(schema='public')
@@ -112,7 +112,7 @@ def get_date_boundary(boundary, **kwargs):
     )
     return db.query_select(query, params=params)[0][0]
 
-def handle_filters(qb: QueryBuilder, **kwargs):
+def handle_filters(qb: QueryBuilder, exclude=None, **kwargs):
     if kwargs.get('league') and kwargs.get('exclude', None) != 'league':
         qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
         qb.where('ld."displayName" = %s', kwargs['league'])
@@ -300,20 +300,8 @@ def get_top_winrate(qb):
 
 #### Update helpers
 def update_url_from_filters_helper(params, filters):
-    for filter_name, filter_value in filters.items():
-        if filter_value:
-            if filter_name == 'dates':
-                if filter_value[0] != None:
-                    params['startDate'] = filter_value[0]
-                    if filter_value[1]:
-                        params['endDate'] = filter_value[1]
-            elif filter_name == 'durations':
-                if filter_value[0] != 0:
-                    params['startDuration'] = filter_value[0]
-                if filter_value[1] and filter_value[1] != get_db_max_duration():
-                    params['endDuration'] = filter_value[1]
-            else:
-                params[filter_name] = filter_value
+    for filter_name, value in filters.items():
+        params.update(FILTER_MAP[filter_name].to_url_params(value))
     return params
 
 def get_db_max_duration(): #TODO: Update this so it updates, or maybe move this to a materialized view and trigger updates

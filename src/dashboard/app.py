@@ -61,6 +61,7 @@ app.layout = dmc.MantineProvider(
                                                         dmc.Title('Dota 2 Analytics'),
                                                         dmc.Badge(id='header-badge')
                                                     ]),
+                                                    id='banner-overview',
                                                     href='/',
                                                     style={
                                                         'textDecoration': 'none',
@@ -72,11 +73,13 @@ app.layout = dmc.MantineProvider(
                                                 # 2. NAVIGATION TABS
                                                 dcc.Link(
                                                     dmc.TabsTab('Overview', value='overview'),
+                                                    id='navbar-overview',
                                                     href='/',
                                                     style={'textDecoration': 'none', 'color': 'inherit'}
                                                 ),
                                                 dcc.Link(
                                                     dmc.TabsTab('Find match', value='find-match'),
+                                                    id='navbar-find-match',
                                                     href='/find-match?page=1',
                                                     style={'textDecoration': 'none', 'color': 'inherit'}
                                                 ),
@@ -103,6 +106,17 @@ app.layout = dmc.MantineProvider(
         )           
     ]
 )
+
+#Keeps search bar
+@app.callback(
+        Output('banner-overview', 'href'),
+        Output('navbar-overview', 'href'),
+        Output('navbar-find-match', 'href'),
+        Input('url', 'search')
+)
+def update_nav_links(search):
+    search = search or ''
+    return f'/{search}', f'/{search}', f'/find-match{search}'
 
 @app.callback(
         Output('navigation-tabs', 'value'),
@@ -137,39 +151,27 @@ def toggle_navbar_visibility(pathname: str):
     return {'width': 0, 'collapsed': {'mobile': True, 'desktop': True}}
 
 @app.callback(
-        Output('teams-filter', 'placeholder'),
         Output('patch-filter', 'data'),
         Output('league-filter', 'data'),
+        Output('teams-filter', 'placeholder'),
         Output('teams-filter', 'data'),
-        Output('date-filter', 'defaultDate'),
         Output('date-filter', 'minDate'),
         Output('date-filter', 'maxDate'),
+        Output('date-filter', 'defaultDate'),
         *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
 def update_filter_state(*args):
     triggered = ctx.triggered_id
     filters = {
-        filter_name: ctx.inputs.get(f'{component_id}.value')
-        for filter_name, component_id in FILTER_IDS.items()
+        f.filter_name: ctx.inputs.get(f'{f.component_id}.value')
+        for f in FILTERS
     }
+
     data = []
-    for filter_name, component_id in FILTER_IDS.items():
-        if filter_name == 'dates':
-            min_date = get_date_boundary('MIN', **filters, exclude='dates')
-            max_date = get_date_boundary('MAX', **filters, exclude='dates')
-            default_date = min_date
-            data.extend([default_date, min_date, max_date])
-        elif filter_name != 'durations':
-            data.append(no_update if triggered == component_id else get_filter_data(filter_name, **filters, exclude=filter_name))
-    try:
-        if len(data[2]) == 0:
-            teams_placeholder = 'No Pro Teams Found'
-        else:
-            teams_placeholder = 'Select 2 To See Head-to-Head'
-    except:
-        teams_placeholder = no_update
-    data.insert(0, teams_placeholder)
+    for f in FILTERS:
+        if f.filter_name != 'durations':
+            data.extend(f.get_outputs(triggered, **filters))
     return tuple(data)
 
 @app.callback(
@@ -214,93 +216,22 @@ def update_url_from_filters_find_match(pathname, page_number, *args):
     State('url', 'search')
 )
 def sync_sidebar_from_url(pathname, search):
-    if pathname in ['/find-match', '/']:
-        params = parse_qs(search.lstrip('?'))
-        filters = {}
-        db_max_duration = get_db_max_duration()
-        for filter_name in FILTER_IDS.keys():
-            if filter_name == 'dates':
-                start_date = params.get('startDate', [None])[0]
-                end_date = params.get('endDate', [None])[0]
-                dates = [start_date, end_date]
-                filters[filter_name] = dates
-            elif filter_name == 'durations':
-                start_duration = params.get('startDuration', [0])[0]
-                end_duration = params.get('endDuration', [db_max_duration])[0]
-                durations = [start_duration, end_duration]
-                filters[filter_name] = durations
-            elif filter_name == 'teams':
-                filters[filter_name] = params.get(filter_name, None)
-            else:
-                filters[filter_name] = params.get(filter_name, [None])[0]
-        
-        patch_data, league_data, teams_data, min_date, max_date = get_url_data(params=params, **filters) #TODO Optimize this passing
-        teams_placeholder = 'Select 2 To See Head-to-Head' if len(teams_data) > 0 else 'No Pro Teams Found'
-        durations = list(map(int, durations))
-        return dmc.ScrollArea(
-            p="md",
-            children=[
-                dmc.Select(
-                    id='patch-filter',
-                    label='Game Version',
-                    placeholder='Select Game Version',
-                    data=patch_data,
-                    value=params.get('patch', [None])[0],
-                    searchable=True
-                ),
-                dmc.Select(
-                    id='league-filter',
-                    label='League',
-                    placeholder='Select League',
-                    data=league_data,
-                    value=params.get('league', [None])[0],
-                    searchable=True
-                ),
-                dmc.MultiSelect(
-                    id='teams-filter',
-                    label='Pro Teams',
-                    placeholder=teams_placeholder,
-                    data=teams_data,
-                    value=params.get('teams', None),
-                    searchable=True
-                ),
-                dmc.Text('Duration', size='sm', fw=500, mt=5),
-                html.Div(
-                    style={
-                        'justifyContent': 'center',
-                        'display': 'flex',
-                        'width': '100%',
-                        'paddingLeft': '10px',
-                        'paddingRight': '10px'
-                    },
-                    children=dmc.RangeSlider(
-                        id='durations-filter',
-                        showLabelOnHover=True,
-                        step=1,
-                        marks=[
-                            {"value": 0,   "label": "0"},
-                            {'value': db_max_duration, 'label': f'{db_max_duration}m'}
-                        ],
-                        min=0,
-                        max=db_max_duration,
-                        value=durations,
-                        mt='md',
-                        mb='xl',
-                        w='100%'
-                    ),
-                ),
-                dmc.DatePicker(
-                    id='date-filter',
-                    type='range',
-                    minDate=min_date,
-                    maxDate=max_date,
-                    value=dates,
-                    defaultDate=start_date,
-                    mt='md'
-                )
-            ]
+    if pathname not in ['/find-match', '/']:
+        return no_update
+    params = parse_qs(search.lstrip('?'))
+
+    filters = {
+        f.filter_name: f.parse_from_url(params)
+        for f in FILTERS
+    }
+    components = [
+        f.render(
+            value=filters[f.filter_name],
+            data=f.get_data(**filters)
         )
-    return no_update
+        for f in FILTERS
+    ]
+    return dmc.ScrollArea(p="md", children=components)
 
 if __name__ == '__main__':
     app.run(debug=True)
