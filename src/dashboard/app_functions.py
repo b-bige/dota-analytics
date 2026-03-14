@@ -169,7 +169,7 @@ def convert_duration_format(duration: int) -> str:
 def get_match_ids(query, params):
     return [res[0] for res in db.query_select(query, params=params)]
 
-def get_most_picked(qb):
+def get_most_picked(qb: QueryBuilder, match_count):
     if not qb.is_filtered():
         results = db.query_select(
             '''SELECT picks, "displayName" 
@@ -187,6 +187,7 @@ def get_most_picked(qb):
         results = db.query_select(query, params=params)
 
     most_picked = pd.DataFrame(results, columns=['picks', 'hero']).sort_values('picks')
+    most_picked['picks'] = (most_picked['picks'] / match_count).round(2) 
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=most_picked['picks'],
@@ -197,17 +198,19 @@ def get_most_picked(qb):
             colorscale=PLOTLY_COLORSCALES['winrate'],
             showscale=False,
         ),
+        text=[f"{picks:.0%}" for picks in most_picked['picks']],
+        textposition='outside'
     ))
     fig = apply_fig_theme(fig)
     fig.update_layout(
         title="Top 5 picked heroes",
         width=600,
-        xaxis=dict(title_text='Picks', range=[0, max(most_picked['picks']) * 1.15], showgrid=False),
+        xaxis=dict(title_text='Picks', tickformat=".0%", range=[0, max(most_picked['picks']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
     return fig
 
-def get_most_banned(qb):
+def get_most_banned(qb:QueryBuilder, match_count):
     if not qb.is_filtered():
         results = db.query_select(
             '''SELECT bans, "displayName" 
@@ -224,6 +227,7 @@ def get_most_banned(qb):
         results = db.query_select(query, params=params)
 
     most_banned = pd.DataFrame(results, columns=['bans', 'hero']).sort_values('bans')
+    most_banned['bans'] = (most_banned['bans'] / match_count).round(2) 
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=most_banned['bans'],
@@ -234,22 +238,20 @@ def get_most_banned(qb):
             colorscale=PLOTLY_COLORSCALES['winrate'],
             showscale=False,
         ),
+        text=[f"{bans:.0%}" for bans in most_banned['bans']],
+        textposition='outside'
     ))
     fig = apply_fig_theme(fig)
     fig.update_layout(
         title="Top 5 banned heroes",
         width=600,
-        xaxis=dict(title_text='Bans', range=[0, max(most_banned['bans']) * 1.15], showgrid=False),
+        xaxis=dict(title_text='Bans', tickformat=".0%", range=[0, max(most_banned['bans']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
     return fig
 
-
-def get_top_winrate(qb):
-    count_query, params = qb.build(select='COUNT(md.id)')
-    match_count = db.query_select(count_query, params=params)[0][0]
+def get_top_winrate(qb: QueryBuilder, match_count):
     min_picks = max(2, match_count // 10)
-
     if not qb.is_filtered():
         results = db.query_select(
             '''SELECT winrate, picks, "displayName"
@@ -297,6 +299,46 @@ def get_top_winrate(qb):
         yaxis=dict(showgrid=False)
     )
     return fig
+
+def get_most_present(qb: QueryBuilder, match_count):
+    if not qb.is_filtered():
+        results = db.query_select(
+            '''SELECT presence, "displayName" 
+               FROM hero_presence_stats
+               ORDER BY presence DESC LIMIT 5'''
+        )
+    else:
+        qb.join('mpb', 'JOIN match_pick_bans mpb ON md.id = mpb.match_id')
+        qb.join('hd_mpb', 'JOIN hero_details hd ON hd.id = mpb."heroId"')
+        query, params = qb.build(
+            select='COUNT(*) AS presence, hd."displayName"',
+            order_by='GROUP BY hd."displayName" ORDER BY presence DESC LIMIT 5'
+        )
+        results = db.query_select(query, params=params)
+    most_present = pd.DataFrame(results, columns=['presence', 'hero']).sort_values('presence')
+    most_present['presence'] = (most_present['presence'] / match_count).round(2)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=most_present['presence'],
+        y=most_present['hero'],
+        orientation='h',
+        marker=dict(
+            color=most_present['presence'],
+            colorscale=PLOTLY_COLORSCALES['winrate'],
+            showscale=False,
+        ),
+        text=[f"{pres:.0%}" for pres in most_present['presence']],
+        textposition='outside'
+    ))
+    fig = apply_fig_theme(fig)
+    fig.update_layout(
+        title="Top 5 present heroes",
+        width=600,
+        xaxis=dict(title_text='Presence', tickformat=".0%", range=[0, max(most_present['presence']) * 1.15], showgrid=False),
+        yaxis=dict(showgrid=False)
+    )
+    return fig
+
 
 #### Update helpers
 def update_url_from_filters_helper(params, filters):

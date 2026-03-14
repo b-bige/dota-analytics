@@ -252,5 +252,63 @@ ORDER BY MIN("durationSeconds");
 
 SELECT MAX("durationSeconds") FROM match_details;
 
+SELECT 
+    h1."displayName" AS hero1,
+    h2."displayName" AS hero2,
+    COUNT(*) AS times_together,
+    AVG(CAST(mp1."isVictory" AS INT)) AS winrate
+FROM match_players mp1
+JOIN match_players mp2 
+    ON mp1.match_id = mp2.match_id 
+    AND mp1."heroId" < mp2."heroId"  -- avoid duplicates
+    AND mp1."isRadiant" = mp2."isRadiant"  -- same team
+JOIN hero_details h1 ON mp1."heroId" = h1.id
+JOIN hero_details h2 ON mp2."heroId" = h2.id
+GROUP BY h1."displayName", h2."displayName"
+HAVING COUNT(*) >= 10
+ORDER BY winrate DESC
+LIMIT 10;
+
+SELECT 
+    hd1."displayName" AS hero1,
+    hd2."displayName" AS hero2,
+    mp1.position AS pos1,
+    mp2.position AS pos2,
+    COUNT(*) AS times_together,
+    ROUND(AVG(CAST(mp1."isVictory" AS INT)) * 100, 2) AS winrate
+FROM match_players mp1
+JOIN match_players mp2 
+    ON mp1.match_id = mp2.match_id 
+    AND mp1."heroId" < mp2."heroId"
+    AND mp1."isRadiant" = mp2."isRadiant"
+JOIN hero_details hd1 ON mp1."heroId" = hd1.id
+JOIN hero_details hd2 ON mp2."heroId" = hd2.id
+WHERE mp1.position = 'POSITION_1' AND mp2.position = 'POSITION_5'  
+GROUP BY hd1."displayName", hd2."displayName", mp1.position, mp2.position
+HAVING COUNT(*) >= 15
+ORDER BY winrate DESC
+LIMIT 10;
+
+SELECT 
+    hd1."displayName" AS hero1,
+    hd2."displayName" AS hero2,
+    mp1.position AS pos1,
+    mp2.position AS pos2,
+    COUNT(*) AS times_together,
+    ROUND(AVG(CAST(mp1."isVictory" AS INT)) * 100, 2) AS winrate
+FROM match_players mp1
+JOIN match_players mp2 
+    ON mp1.match_id = mp2.match_id 
+    AND mp1."heroId" < mp2."heroId"
+    AND mp1."isRadiant" = mp2."isRadiant"
+JOIN hero_details hd1 ON mp1."heroId" = hd1.id
+JOIN hero_details hd2 ON mp2."heroId" = hd2.id
+JOIN match_details md ON mp1.match_id = md.id
+WHERE mp1.position = 'POSITION_3' AND mp2.position = 'POSITION_4' AND md."startDateTimeHuman" > '2025-02-01' 
+GROUP BY hd1."displayName", hd2."displayName", mp1.position, mp2.position
+HAVING COUNT(*) >= 20
+ORDER BY times_together DESC
+LIMIT 50;
+
 --TODO Separate tables more
 

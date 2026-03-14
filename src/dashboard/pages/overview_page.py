@@ -14,9 +14,10 @@ from dashboard.filters import *
 
 dash.register_page(__name__, path='')
 
-_winrate_fig = get_top_winrate(QueryBuilder())
-_picked_fig  = get_most_picked(QueryBuilder())
-_banned_fig  = get_most_banned(QueryBuilder())
+_total_matches = get_total_matches()
+_winrate_fig = get_top_winrate(QueryBuilder(), _total_matches)
+_picked_fig  = get_most_picked(QueryBuilder(), _total_matches)
+_banned_fig  = get_most_banned(QueryBuilder(), _total_matches)
 
 def layout(**kwargs):
     return [
@@ -44,6 +45,19 @@ def layout(**kwargs):
             },
             children=[]
         ),
+        dmc.Select(
+            id='graph-select',
+            label='Top heroes by:',
+            data=[
+                {'value': 'win', 'label': 'Win-rate'},
+                {'value': 'pick', 'label': 'Pick-rate'},
+                {'value': 'ban', 'label': 'Ban-rate'},
+                {'value': 'pres', 'label': 'Presence-rate (Pick & Ban)'}
+            ],
+            value='win',
+            w=300,
+            mb='md'
+        ),
         html.Div(
             style={
                 "display": "flex",
@@ -52,43 +66,17 @@ def layout(**kwargs):
             },
             children=[
                 dcc.Graph(
-                    id='top-five-hero-winrate',
+                    id='top-heroes',
                     figure=_winrate_fig
                 ),
             ]
         ),
-        html.Div(
-            style={
-                "display": "flex",
-                "width": "100%",
-                'alignItems': 'flex-start'
-            },
-            children=[
-                dcc.Graph(
-                    id='top-five-picked',
-                    figure=_picked_fig
-                ),
-            ]
-        ),
-        html.Div(
-            style={
-                "display": "flex",
-                "width": "100%",
-                'alignItems': 'flex-start'
-            },
-            children=[
-                dcc.Graph(
-                    id='top-five-banned',
-                    figure=_banned_fig
-                ),
-            ]
-        )
     ]
 
 @callback(
         Output('error-card', 'children'),
         Output('error-card', 'style'),
-        Input('top-five-hero-winrate', 'figure')
+        Input('top-heroes', 'figure')
 )
 def show_error(figure):
     if figure == None:
@@ -120,14 +108,13 @@ def show_error(figure):
         Output('total-matches', 'children'),
         Output('stat-radiant-win', 'children'),
         Output('stat-avg-duration', 'children'),
-        Output('top-five-hero-winrate', 'figure'),
-        Output('top-five-picked', 'figure'),
-        Output('top-five-banned', 'figure'),
+        Output('top-heroes', 'figure'),
         State('url', 'pathname'),
+        Input('graph-select', 'value'),
         *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
-def update_overview(pathname, *args):
+def update_overview(pathname, graph_select, *args):
     if pathname != '/':
         return no_update
     filters = {
@@ -152,13 +139,18 @@ def update_overview(pathname, *args):
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
     try:
-        winrate_fig = get_top_winrate(qb.copy())
-        picked_fig = get_most_picked(qb.copy())
-        banned_fig = get_most_banned(qb.copy())
-        return found_matches, radiant_win, avg_game_length, winrate_fig, picked_fig, banned_fig
+        match graph_select:
+            case 'win':
+                fig = get_top_winrate(qb, found_matches)
+            case 'pick':
+                fig = get_most_picked(qb, found_matches)
+            case 'ban':
+                fig = get_most_banned(qb, found_matches)
+            case 'pres':
+                fig = get_most_present(qb, found_matches)
+        return found_matches, radiant_win, avg_game_length, fig
     except:
-
-        return found_matches, radiant_win, avg_game_length, None, None, None
+        return found_matches, radiant_win, avg_game_length, None
 
 def stat_card(label, id):
     return dmc.Paper(

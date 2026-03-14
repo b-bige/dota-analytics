@@ -224,7 +224,7 @@ class DurationsFilter(Filter):
     
     def get_data(self, **filters):
         qb = QueryBuilder()
-        self.handle_filters(qb, **filters)
+        self.handle_filters(qb, **filters, exclude='durations')
         query, params = qb.build(select='MAX("durationSeconds") / 60')
         return self.db.query_select(query, params=params)[0][0]
 
@@ -248,7 +248,7 @@ class DurationsFilter(Filter):
                         {'value': self.db_max_duration, 'label': f'{self.db_max_duration}m'}
                     ],
                     min=0,
-                    max=data,
+                    max=self.db_max_duration,
                     value=value,
                     mt='md',
                     mb='xl',
@@ -304,7 +304,6 @@ class DatesFilter(Filter):
         return self.db.query_select(query, params=params)[0][0]
     
     def render(self, value, data):
-        print('render date called')
         default_date = value[0] if value[0] else data[0]
         return dmc.DatePicker(
             id='date-filter',
@@ -319,7 +318,6 @@ class DatesFilter(Filter):
     def get_outputs(self, triggered_component_id, **filters) -> list:
         # dates has 3 outputs: defaultDate, minDate, maxDate
         min_date, max_date = self.get_date_boundary('MIN', **filters).strftime('%Y-%m-%d'), self.get_date_boundary('MAX', **filters).strftime('%Y-%m-%d')
-        print("defaultDate:", min_date, type(min_date))
         return [min_date, max_date, min_date]  # defaultDate, minDate, maxDate
 
 FILTER_IDS = {

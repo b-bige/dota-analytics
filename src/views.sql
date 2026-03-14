@@ -21,3 +21,11 @@ GROUP BY hd."displayName";
 
 CREATE INDEX idx_mv_winrate ON hero_winrate_stats(winrate DESC);
 CREATE INDEX idx_mv_hero_picks ON hero_winrate_stats(picks);
+
+CREATE MATERIALIZED VIEW hero_presence_stats AS
+SELECT
+    COUNT(*) AS presence,
+    hd."displayName"
+FROM match_pick_bans mpb
+JOIN hero_details hd ON hd.id = mpb."heroId"
+GROUP BY hd."displayName", hd."shortName";
