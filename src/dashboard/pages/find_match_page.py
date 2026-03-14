@@ -14,7 +14,7 @@ sys.path.append(DASHBOARD_DIR)
 sys.path.append(SRC_DIR)
 
 from app_functions import *
-from filters import *
+from dashboard.filters import *
 
 vs_logo = dmc.Avatar(
     "VS",
@@ -83,14 +83,16 @@ def update_match_container_and_pages(pathname, search, page_number, *args): #TOD
         url_league = url_params.get('league', [None])[0]
         url_start = url_params.get('startDate', [None])[0]
         url_end = url_params.get('endDate', [None])[0]
+        url_min_duration = url_params.get('startDuration', [None])[0]
+        url_max_duration = url_params.get('endDuration', [None])[0]
 
         # Only reset if the filter change didn't come from the URL sync
-        filter_matches_url = (filters['patch'] == url_patch) and (filters['league'] == url_league) and (filters['dates'] == [url_start, url_end])
+        filter_matches_url = (filters['patch'] == url_patch) and (filters['league'] == url_league) and (filters['dates'] == [url_start, url_end] and filters['durations'] == [url_min_duration, url_max_duration])
         page_number = 1 if not filter_matches_url or page_number > total_pages else page_number
     offset = (int(page_number) - 1) * PAGE_SIZE
     qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
     qb.join('dire', 'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
-    qb.join('ld', 'LEFT JOIN league_details ld ON ld.id = md."leagueId"')
+    qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
     query, params = qb.build(
         select='''
             md.id, md."radiantTeamId", md."direTeamId", 

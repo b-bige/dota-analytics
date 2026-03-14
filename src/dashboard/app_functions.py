@@ -18,8 +18,10 @@ import time
 
 from db_functions import DotaDB
 from query_builder import QueryBuilder
+from dashboard.filters import *
 
 db = DotaDB(schema='public')
+_DB_MAX_DURATION = None
 
 ##### Theming
 def apply_fig_theme(fig: go.Figure):
@@ -27,10 +29,17 @@ def apply_fig_theme(fig: go.Figure):
     return fig
 
 ##### Basic and filter helpers
+
 def get_total_matches(clauses: str='', params=None):
     query = 'SELECT COUNT(id) FROM match_details md '
     if clauses:
         query += clauses
+    return db.query_select(query, params=params)[0][0]
+
+def get_max_duration(**kwargs):
+    qb = QueryBuilder()
+    qb = handle_filters(qb, **kwargs)
+    query, params = qb.build(select='MAX("durationSeconds") / 60')
     return db.query_select(query, params=params)[0][0]
 
 def get_url_data(params:dict, **kwargs):
@@ -43,7 +52,7 @@ def get_url_data(params:dict, **kwargs):
                 data.append(get_leagues(**kwargs, exclude=filter_name if params.get(filter_name, None) else None))
             case 'teams':
                 data.append(get_teams(**kwargs, exclude=filter_name if params.get(filter_name, None) else None))
-    data.append(get_date_boundary('MIN', **kwargs, exclude='dates'))
+    data.append(get_date_boundary('MIN', **kwargs, exclude='dates')) ##TODO Check if this is alright?
     data.append(get_date_boundary('MAX', **kwargs, exclude='dates'))
     return tuple(data)
 
@@ -55,7 +64,6 @@ def get_filter_data(filter:str, **kwargs):
             return get_leagues(**kwargs)
         case 'teams':
             return get_teams(**kwargs)
-    
 
 def get_teams(**kwargs):
     qb = QueryBuilder()
@@ -116,18 +124,26 @@ def handle_filters(qb: QueryBuilder, **kwargs):
     if kwargs.get('teams') and kwargs.get('exclude', None) != 'teams':
         teams = kwargs.get('teams')
         if teams[0]:
-            qb.join('tdr', 'LEFT JOIN team_details tdr ON tdr.id = md."radiantTeamId"')
-            qb.join('tdd', 'LEFT JOIN team_details tdd ON tdd.id = md."direTeamId"')
+            qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
+            qb.join('dire', 'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
             if len(teams) == 2:
                 qb.where(
-                    '(tdr.name = %s AND tdd.name = %s) OR (tdr.name = %s AND tdd.name = %s)',
+                    '(radiant.name = %s AND dire.name = %s) OR (radiant.name = %s AND dire.name = %s)',
                     teams[0], teams[1], teams[1], teams[0]
                 )
             else:
-                qb.where('(tdr.name = ANY(%s)) OR (tdd.name = ANY(%s))', teams, teams)
+                qb.where('(radiant.name = ANY(%s)) OR (dire.name = ANY(%s))', teams, teams)
+
+    if kwargs.get('durations') and kwargs.get('exclude', None) != 'durations':
+        start, end = kwargs.get('durations')
+        start = int(start)*60 if start else 0
+        end = int(end)*60 if end else get_db_max_duration()
+        if start and start != 0:
+            qb.where('md."durationSeconds" > %s', start)
+        if end and end != get_db_max_duration()*60:
+            qb.where('md."durationSeconds" < %s', end)
 
     if kwargs.get('dates', [None])[0] and kwargs.get('exclude', None) != 'dates':
-
         start, end = handle_date_filter(kwargs['dates'])
         qb.where('md."startDateTimeHuman" BETWEEN %s AND %s', start, end)
     return qb
@@ -190,7 +206,6 @@ def get_most_picked(qb):
         yaxis=dict(showgrid=False)
     )
     return fig
-
 
 def get_most_banned(qb):
     if not qb.is_filtered():
@@ -282,3 +297,25 @@ def get_top_winrate(qb):
         yaxis=dict(showgrid=False)
     )
     return fig
+
+#### Update helpers
+def update_url_from_filters_helper(params, filters):
+    for filter_name, filter_value in filters.items():
+        if filter_value:
+            if filter_name == 'dates':
+                if filter_value[0] != None:
+                    params['startDate'] = filter_value[0]
+                    if filter_value[1]:
+                        params['endDate'] = filter_value[1]
+            elif filter_name == 'durations':
+                if filter_value[0] != 0:
+                    params['startDuration'] = filter_value[0]
+                if filter_value[1] and filter_value[1] != get_db_max_duration():
+                    params['endDuration'] = filter_value[1]
+            else:
+                params[filter_name] = filter_value
+    return params
+
+def get_db_max_duration(): #TODO: Update this so it updates, or maybe move this to a materialized view and trigger updates
+    query = 'SELECT MAX("durationSeconds") / 60 FROM match_details'
+    return db.query_select(query)[0][0]

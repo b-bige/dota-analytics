@@ -10,7 +10,7 @@ import logging
 from theme import PLOTLY_COLORSCALES, COLORS
 
 from app_functions import *
-from filters import *
+from dashboard.filters import *
 
 dash.register_page(__name__, path='')
 

@@ -232,5 +232,25 @@ SELECT
 
 SELECT * FROM team_details WHERE "isPro" = 't';
 
+SELECT MAX("durationSeconds") / 60 FROM match_details;
+SELECT "durationSeconds" / 60 AS mins 
+FROM match_details
+WHERE "durationSeconds" / 60 > 90;
+
+SELECT 
+    CASE 
+        WHEN "durationSeconds" < 25 * 60                          THEN '< 25 min'
+        WHEN "durationSeconds" BETWEEN 25 * 60 AND 45 * 60 - 1   THEN '25 - 45 min'
+        WHEN "durationSeconds" BETWEEN 45 * 60 AND 60 * 60 - 1   THEN '45 - 60 min'
+        WHEN "durationSeconds" BETWEEN 60 * 60 AND 85 * 60 - 1   THEN '60 - 90 min'
+        ELSE                                                            '> 80 min'
+    END AS bucket,
+    COUNT(*) AS games
+FROM match_details
+GROUP BY bucket
+ORDER BY MIN("durationSeconds");
+
+SELECT MAX("durationSeconds") FROM match_details;
+
 --TODO Separate tables more
 

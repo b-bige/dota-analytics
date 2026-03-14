@@ -27,7 +27,7 @@ from basic_logger import setup_logger
 import time
 
 from theme import *
-from filters import *
+from dashboard.filters import *
 
 db = DotaDB(schema='public')
 setup_logger(logfile_path='logs/dashboard_app.log')
@@ -153,7 +153,6 @@ def update_filter_state(*args):
         filter_name: ctx.inputs.get(f'{component_id}.value')
         for filter_name, component_id in FILTER_IDS.items()
     }
-
     data = []
     for filter_name, component_id in FILTER_IDS.items():
         if filter_name == 'dates':
@@ -161,7 +160,7 @@ def update_filter_state(*args):
             max_date = get_date_boundary('MAX', **filters, exclude='dates')
             default_date = min_date
             data.extend([default_date, min_date, max_date])
-        else:
+        elif filter_name != 'durations':
             data.append(no_update if triggered == component_id else get_filter_data(filter_name, **filters, exclude=filter_name))
     try:
         if len(data[2]) == 0:
@@ -179,20 +178,15 @@ def update_filter_state(*args):
     *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
     prevent_initial_call=True
 )
-def update_url_from_filters_overview(pathname, patch, league, teams, dates):
+def update_url_from_filters_overview(pathname, *args): #TODO: create a helper function from this and the one below
     if pathname != '/':
         return no_update
     params = {}
+    filters = {}
     for filter_name, component_id in FILTER_IDS.items():
         filter_value = ctx.inputs.get(f'{component_id}.value')
-        if filter_value:
-            if filter_name == 'dates':
-                if filter_value[0] != None:
-                    params['startDate'] = filter_value[0]
-                    if filter_value[1]:
-                        params['endDate'] = filter_value[1]
-            else:
-                params[filter_name] = filter_value
+        filters[filter_name] = filter_value
+    params = update_url_from_filters_helper({}, filters)
     return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(
@@ -207,16 +201,11 @@ def update_url_from_filters_find_match(pathname, page_number, *args):
         return no_update
     params = {}
     if page_number: params['page'] = page_number
+    filters = {}
     for filter_name, component_id in FILTER_IDS.items():
         filter_value = ctx.inputs.get(f'{component_id}.value')
-        if filter_value:
-            if filter_name == 'dates':
-                if filter_value[0] != None:
-                    params['startDate'] = filter_value[0]
-                    if filter_value[1]:
-                        params['endDate'] = filter_value[1]
-            else:
-                params[filter_name] = filter_value
+        filters[filter_name] = filter_value
+    params = update_url_from_filters_helper(params, filters)
     return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(
@@ -228,16 +217,26 @@ def sync_sidebar_from_url(pathname, search):
     if pathname in ['/find-match', '/']:
         params = parse_qs(search.lstrip('?'))
         filters = {}
+        db_max_duration = get_db_max_duration()
         for filter_name in FILTER_IDS.keys():
             if filter_name == 'dates':
                 start_date = params.get('startDate', [None])[0]
                 end_date = params.get('endDate', [None])[0]
                 dates = [start_date, end_date]
                 filters[filter_name] = dates
+            elif filter_name == 'durations':
+                start_duration = params.get('startDuration', [0])[0]
+                end_duration = params.get('endDuration', [db_max_duration])[0]
+                durations = [start_duration, end_duration]
+                filters[filter_name] = durations
+            elif filter_name == 'teams':
+                filters[filter_name] = params.get(filter_name, None)
             else:
                 filters[filter_name] = params.get(filter_name, [None])[0]
+        
         patch_data, league_data, teams_data, min_date, max_date = get_url_data(params=params, **filters) #TODO Optimize this passing
         teams_placeholder = 'Select 2 To See Head-to-Head' if len(teams_data) > 0 else 'No Pro Teams Found'
+        durations = list(map(int, durations))
         return dmc.ScrollArea(
             p="md",
             children=[
@@ -259,11 +258,36 @@ def sync_sidebar_from_url(pathname, search):
                 ),
                 dmc.MultiSelect(
                     id='teams-filter',
-                    label='Pro teams',
+                    label='Pro Teams',
                     placeholder=teams_placeholder,
                     data=teams_data,
                     value=params.get('teams', None),
                     searchable=True
+                ),
+                dmc.Text('Duration', size='sm', fw=500, mt=5),
+                html.Div(
+                    style={
+                        'justifyContent': 'center',
+                        'display': 'flex',
+                        'width': '100%',
+                        'paddingLeft': '10px',
+                        'paddingRight': '10px'
+                    },
+                    children=dmc.RangeSlider(
+                        id='durations-filter',
+                        showLabelOnHover=True,
+                        step=1,
+                        marks=[
+                            {"value": 0,   "label": "0"},
+                            {'value': db_max_duration, 'label': f'{db_max_duration}m'}
+                        ],
+                        min=0,
+                        max=db_max_duration,
+                        value=durations,
+                        mt='md',
+                        mb='xl',
+                        w='100%'
+                    ),
                 ),
                 dmc.DatePicker(
                     id='date-filter',
@@ -272,7 +296,7 @@ def sync_sidebar_from_url(pathname, search):
                     maxDate=max_date,
                     value=dates,
                     defaultDate=start_date,
-                    mt="md"
+                    mt='md'
                 )
             ]
         )
