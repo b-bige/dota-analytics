@@ -297,7 +297,7 @@ class DatesFilter(Filter):
 
     def get_date_boundary(self, boundary, **kwargs) -> datetime: 
         qb = QueryBuilder()
-        self.handle_filters(qb, **kwargs)
+        self.handle_filters(qb, **kwargs, exclude='dates')
         query, params = qb.build(
             select=f'{boundary}(md."startDateTimeHuman")'
         )

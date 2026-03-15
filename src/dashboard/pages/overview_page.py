@@ -15,9 +15,8 @@ from dashboard.filters import *
 dash.register_page(__name__, path='')
 
 _total_matches = get_total_matches()
-_winrate_fig = get_top_winrate(QueryBuilder(), _total_matches)
-_picked_fig  = get_most_picked(QueryBuilder(), _total_matches)
-_banned_fig  = get_most_banned(QueryBuilder(), _total_matches)
+_winrate_fig = fig_top_winrate(QueryBuilder(), _total_matches)
+_duration_fig = fig_duration_hist(QueryBuilder())
 
 def layout(**kwargs):
     return [
@@ -41,22 +40,40 @@ def layout(**kwargs):
                 "display": "flex",
                 "width": "100%",
                 'alignItems': 'flex-start',
-                'height': '0px'
+                'height': '0px',
             },
             children=[]
         ),
-        dmc.Select(
-            id='graph-select',
-            label='Top heroes by:',
-            data=[
-                {'value': 'win', 'label': 'Win-rate'},
-                {'value': 'pick', 'label': 'Pick-rate'},
-                {'value': 'ban', 'label': 'Ban-rate'},
-                {'value': 'pres', 'label': 'Presence-rate (Pick & Ban)'}
-            ],
-            value='win',
-            w=300,
-            mb='md'
+        html.Div(
+            style={
+                "display": "flex",
+                "width": "100%",
+                'alignItems': 'flex-start'
+            },
+            children=[
+                html.Div(
+                    style={
+                        "display": "flex",
+                        "width": "50%",
+                        'alignItems': 'flex-start' 
+                    },
+                    children=[
+                        dmc.Select(
+                            id='top-heroes-select',
+                            label='Top heroes by',
+                            data=[
+                                {'value': 'win', 'label': 'Win-rate'},
+                                {'value': 'pick', 'label': 'Pick-rate'},
+                                {'value': 'ban', 'label': 'Ban-rate'},
+                                {'value': 'pres', 'label': 'Presence-rate (Pick & Ban)'}
+                            ],
+                            value='win',
+                            w=300,
+                            mb='md'
+                        ),
+                    ]
+                ),
+            ]
         ),
         html.Div(
             style={
@@ -69,9 +86,44 @@ def layout(**kwargs):
                     id='top-heroes',
                     figure=_winrate_fig
                 ),
+                dcc.Graph(
+                    id='duration-distr',
+                    figure=_duration_fig
+                )
             ]
         ),
     ]
+
+# html.Div(
+#     style={
+#         "display": "flex",
+#         "width": "50%",
+#         'alignItems': 'flex-start' 
+#     },
+#     children=[
+#         dmc.Select(
+#             id='duration-lane-select',
+#             label='Choose Lane',
+#             data=[
+#                 {'value': 'safe', 'label': 'Safe Lane'},
+#                 {'value': 'mid', 'label': 'Mid Lane'},
+#                 {'value': 'off', 'label': 'Off lane'}
+#             ],
+#             w=300
+#         ),
+#         dmc.Select(
+#             id='duration-sort-select',
+#             label='Sort by',
+#             data=[
+#                 {'value': 'winrate', 'label': 'Win-rate'},
+#                 {'value': 'count', 'label': 'Times played'}
+#             ],
+#             value='win',
+#             w=300,
+#             mb='md'
+#         )
+#     ]
+# ),
 
 @callback(
         Output('error-card', 'children'),
@@ -109,8 +161,9 @@ def show_error(figure):
         Output('stat-radiant-win', 'children'),
         Output('stat-avg-duration', 'children'),
         Output('top-heroes', 'figure'),
+        Output('duration-distr', 'figure'),
         State('url', 'pathname'),
-        Input('graph-select', 'value'),
+        Input('top-heroes-select', 'value'),
         *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
@@ -141,16 +194,17 @@ def update_overview(pathname, graph_select, *args):
     try:
         match graph_select:
             case 'win':
-                fig = get_top_winrate(qb, found_matches)
+                top_heroes_fig = fig_top_winrate(qb.copy(), found_matches)
             case 'pick':
-                fig = get_most_picked(qb, found_matches)
+                top_heroes_fig = fig_most_picked(qb.copy(), found_matches)
             case 'ban':
-                fig = get_most_banned(qb, found_matches)
+                top_heroes_fig = fig_most_banned(qb.copy(), found_matches)
             case 'pres':
-                fig = get_most_present(qb, found_matches)
-        return found_matches, radiant_win, avg_game_length, fig
+                top_heroes_fig = fig_most_present(qb.copy(), found_matches)      
     except:
-        return found_matches, radiant_win, avg_game_length, None
+        top_heroes_fig = None
+    duration_fig = fig_duration_hist(qb.copy())
+    return found_matches, radiant_win, avg_game_length, top_heroes_fig, duration_fig 
 
 def stat_card(label, id):
     return dmc.Paper(

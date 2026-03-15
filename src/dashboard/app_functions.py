@@ -12,6 +12,7 @@ sys.path.append(os.path.abspath('./src'))
 
 from theme import PLOTLY_LAYOUT, PLOTLY_COLORSCALES, COLORS
 import plotly.graph_objects as go
+import plotly.express as px
 
 import logging
 import time
@@ -169,7 +170,7 @@ def convert_duration_format(duration: int) -> str:
 def get_match_ids(query, params):
     return [res[0] for res in db.query_select(query, params=params)]
 
-def get_most_picked(qb: QueryBuilder, match_count):
+def fig_most_picked(qb: QueryBuilder, match_count):
     if not qb.is_filtered():
         results = db.query_select(
             '''SELECT picks, "displayName" 
@@ -205,12 +206,12 @@ def get_most_picked(qb: QueryBuilder, match_count):
     fig.update_layout(
         title="Top 5 picked heroes",
         width=600,
-        xaxis=dict(title_text='Picks', tickformat=".0%", range=[0, max(most_picked['picks']) * 1.15], showgrid=False),
+        xaxis=dict(title_text='Pick rate', tickformat=".0%", range=[0, max(most_picked['picks']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
     return fig
 
-def get_most_banned(qb:QueryBuilder, match_count):
+def fig_most_banned(qb:QueryBuilder, match_count):
     if not qb.is_filtered():
         results = db.query_select(
             '''SELECT bans, "displayName" 
@@ -245,12 +246,12 @@ def get_most_banned(qb:QueryBuilder, match_count):
     fig.update_layout(
         title="Top 5 banned heroes",
         width=600,
-        xaxis=dict(title_text='Bans', tickformat=".0%", range=[0, max(most_banned['bans']) * 1.15], showgrid=False),
+        xaxis=dict(title_text='Ban rate', tickformat=".0%", range=[0, max(most_banned['bans']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
     return fig
 
-def get_top_winrate(qb: QueryBuilder, match_count):
+def fig_top_winrate(qb: QueryBuilder, match_count):
     min_picks = max(2, match_count // 10)
     if not qb.is_filtered():
         results = db.query_select(
@@ -294,13 +295,13 @@ def get_top_winrate(qb: QueryBuilder, match_count):
     fig.update_layout(
         title="Top 5 heroes by winrate",
         width=600,
-        xaxis=dict(title_text='Hero winrate', tickformat=".0%",
+        xaxis=dict(title_text='Winrate', tickformat=".0%",
                    range=[0, max(winrates['winrate']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
     return fig
 
-def get_most_present(qb: QueryBuilder, match_count):
+def fig_most_present(qb: QueryBuilder, match_count):
     if not qb.is_filtered():
         results = db.query_select(
             '''SELECT presence, "displayName" 
@@ -334,11 +335,35 @@ def get_most_present(qb: QueryBuilder, match_count):
     fig.update_layout(
         title="Top 5 present heroes",
         width=600,
-        xaxis=dict(title_text='Presence', tickformat=".0%", range=[0, max(most_present['presence']) * 1.15], showgrid=False),
+        xaxis=dict(title_text='Presence rate', tickformat=".0%", range=[0, max(most_present['presence']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
     return fig
 
+def fig_duration_hist(qb: QueryBuilder):
+    query, params = qb.build(select='"durationSeconds" / 60')
+    results = pd.Series([r[0] for r in db.query_select(query, params=params)])
+    fig = px.histogram(results, nbins=30, color_discrete_sequence=[COLORS['primary']])
+    fig = apply_fig_theme(fig)
+    fig.update_traces(
+        patch={
+            'marker': dict(
+                showscale=False,
+                line=dict(
+                    color=COLORS['bg_elevated'], # gap between bars
+                    width=1
+                )
+            )
+        }
+    )
+    fig.update_layout(
+        title="Match duration",
+        width=600,
+        xaxis=dict(showgrid=False, title_text='Match Duration Distribution', ticksuffix='m'),
+        yaxis=dict(showgrid=False, title_text='Number of Matches'),
+        showlegend=False
+    )
+    return fig
 
 #### Update helpers
 def update_url_from_filters_helper(params, filters):
