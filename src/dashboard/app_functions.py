@@ -196,7 +196,7 @@ def fig_most_picked(qb: QueryBuilder, match_count):
         orientation='h',
         marker=dict(
             color=most_picked['picks'],
-            colorscale=PLOTLY_COLORSCALES['winrate'],
+            colorscale=PLOTLY_COLORSCALES['colorscale'],
             showscale=False,
         ),
         text=[f"{picks:.0%}" for picks in most_picked['picks']],
@@ -236,7 +236,7 @@ def fig_most_banned(qb:QueryBuilder, match_count):
         orientation='h',
         marker=dict(
             color=most_banned['bans'],
-            colorscale=PLOTLY_COLORSCALES['winrate'],
+            colorscale=PLOTLY_COLORSCALES['colorscale'],
             showscale=False,
         ),
         text=[f"{bans:.0%}" for bans in most_banned['bans']],
@@ -284,7 +284,7 @@ def fig_top_winrate(qb: QueryBuilder, match_count):
         orientation='h',
         marker=dict(
             color=winrates['winrate'],
-            colorscale=PLOTLY_COLORSCALES['winrate'],
+            colorscale=PLOTLY_COLORSCALES['colorscale'],
             showscale=False,
         ),
         customdata=winrates['picks'],
@@ -325,7 +325,7 @@ def fig_most_present(qb: QueryBuilder, match_count):
         orientation='h',
         marker=dict(
             color=most_present['presence'],
-            colorscale=PLOTLY_COLORSCALES['winrate'],
+            colorscale=PLOTLY_COLORSCALES['colorscale'],
             showscale=False,
         ),
         text=[f"{pres:.0%}" for pres in most_present['presence']],

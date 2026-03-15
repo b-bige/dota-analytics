@@ -4,8 +4,8 @@ COLORS = {
     "bg_elevated":  "#eef1f6",   # subtle hover / elevated
     "bg_border":    "#dde3ec",   # soft borders
 
-    "primary":      "#2563eb",   # confident blue — accent
-    "primary_dim":  "#93b4f5",   # light blue for secondary elements
+    "primary":      "#3498db",   # confident blue — accent
+    "primary_dim":  "#5eade2",   # light blue for secondary elements
     "radiant":      "#16a34a",   # win / positive
     "dire":         "#dc2626",   # loss / negative
     "neutral":      "#6b7280",   # neutral stats
@@ -13,9 +13,15 @@ COLORS = {
     "text_bright":  "#0f172a",   # near-black headings
     "text_body":    "#374151",   # dark gray body
     "text_muted":   "#9ca3af",   # light gray labels
+
+    "colorscale_low": '#1abc9c'
 }
 
 PLOTLY_COLORSCALES = {
+    "colorscale": [
+        [0.0, '#5eade2'],
+        [1.0, '#2574a9']
+    ],
     "winrate": [
         [0.0, COLORS["dire"]],
         [0.5, COLORS["neutral"]],
@@ -74,9 +80,21 @@ PLOTLY_LAYOUT = dict(
 )
 
 MANTINE_THEME = {
-    "primaryColor": "blue",
+    "primaryColor": "brand", #HERE
     "fontFamily": "'DM Sans', sans-serif",
     "colors": {
+        "brand": [
+            "#ebf5fb",  # 0 lightest
+            "#d6eaf8",  # 1
+            "#aed6f1",  # 2
+            "#86c1e9",  # 3
+            "#5eade2",  # 4
+            "#3a9fd9",  # 5
+            "#3498db",  # 6 ← your main color
+            "#2e86c1",  # 7
+            "#2574a9",  # 8
+            "#1a5276",  # 9 darkest
+        ],
         "gray": [
             COLORS["bg_surface"],   # 0
             COLORS["bg_base"],      # 1
