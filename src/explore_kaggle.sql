@@ -10,3 +10,11 @@ ALTER TABLE main_metadata ADD CONSTRAINT pk_main_metadata_match_id PRIMARY KEY(m
 
 SELECT * FROM main_metadata WHERE match_id = 6326723311;
 
+SELECT COUNT(*) 
+FROM main_metadata
+WHERE start_date_time > '2021-12-15 14:45:00';
+
+SELECT COUNT(DISTINCT match_id) FROM main_metadata;
+
+SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name = 'main_metadata';
+

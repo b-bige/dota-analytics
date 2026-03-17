@@ -11,13 +11,20 @@ from ratelimit import limits, sleep_and_retry
 from tenacity import retry, wait_exponential, retry_if_exception_type
 
 class DotaDB:
-    def __init__(self, schema: str='public'):
+    def __init__(self, schema: str='public', local: bool = False):
+        self.set_local_or_remote(schema=schema, local=local)
+
+    def set_local_or_remote(self, schema:str='public', local=False):
         load_dotenv()
         user = os.getenv("DB_USER")
-        password = os.getenv("DB_PASSWORD")
-        host = os.getenv("DB_HOST")
         port = os.getenv("DB_PORT")
         dbname = os.getenv("DB_NAME")
+        if local:
+            host = os.getenv("DB_LOCAL_HOST")
+            password = os.getenv("DB_LOCAL_PASSWORD")
+        else:
+            host = os.getenv("DB_HOST")
+            password = os.getenv("DB_PASSWORD")
         
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
         self.stratz_api_key = os.getenv("API_KEY")
@@ -46,7 +53,7 @@ class DotaDB:
                 cur.execute(final_query, params)
                 return cur.fetchall() if cur.description else None
             
-    def query_select_to_df(self, query, columns=None, identifiers=None, params=None):
+    def query_select_to_df(self, query, columns=None, identifiers=None, params=None, table=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -59,6 +66,10 @@ class DotaDB:
                     data = cur.fetchall()
                     if columns: 
                         return pd.DataFrame(data, columns=columns)
+                    else:
+                        table_query = "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name = %s"
+                        table_columns = [c[0] for c in self.query_select(table_query, params=(table, ))]
+                        return pd.DataFrame(data, columns=table_columns)
                 return None
             
     def create_table_from_df(self, df, table_name, convert_dtypes=True, add_serial_id=False, jsonb_cols=[]):
@@ -130,6 +141,21 @@ class DotaDB:
                     final_query = sql.SQL(query)
                 cur.execute(final_query, params)
                 conn.commit()
+                return None
+            
+    def query_executemany(self, query, identifiers=None, params=None):
+        with psycopg.connect(self.conn_str) as conn:
+            with conn.cursor() as cur:
+                if identifiers:
+                    final_query = sql.SQL(query).format(*[sql.Identifier(name) for name in identifiers])
+                else:
+                    final_query = sql.SQL(query)
+                try:
+                    cur.executemany(final_query, params)
+                    conn.commit()
+                    logging.info('Successfully executed query')
+                except Exception as e:
+                    logging.error(f'Failed to execute query: {e}')
                 return None
 
     @retry(

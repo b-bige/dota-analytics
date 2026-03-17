@@ -310,5 +310,13 @@ HAVING COUNT(*) >= 20
 ORDER BY times_together DESC
 LIMIT 50;
 
+SELECT COUNT(DISTINCT match_id) FROM match_pick_bans mpb
+JOIN match_details md on md.id = mpb.match_id;
+
+SELECT * FROM hero_details WHERE id = 85;
+SELECT * FROM match_details WHERE id = 6321751509;
+
+SELECT * FROM match_details WHERE avg_radiant_rating IS NULL;
+
 --TODO Separate tables more
 
