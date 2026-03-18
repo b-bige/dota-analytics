@@ -319,9 +319,41 @@ SELECT * FROM match_details WHERE id = 6321751509;
 SELECT * FROM match_details WHERE avg_radiant_rating IS NULL;
 
 SELECT DISTINCT "seriesId" FROM match_details;
-
+SELECT * FROM match_details WHERE "seriesId" = 737586;
 SELECT AVG(CAST("didRadiantWin" AS INT)) FROM match_details WHERE avg_radiant_rating > avg_dire_rating;
-SELECT AVG(CAST("didRadiantWin" AS INT)) FROM match_details WHERE avg_dire_rating > avg_radiant_rating;
+SELECT 1 - AVG(CAST("didRadiantWin" AS INT)) FROM match_details WHERE avg_dire_rating > avg_radiant_rating;
+
+SELECT 
+    COUNT(*) as total,
+    COUNT(avg_radiant_rating) as with_ratings,
+    COUNT(*) - COUNT(avg_radiant_rating) as without_ratings
+FROM match_details;
+SELECT 
+    percentile_cont(0.25) WITHIN GROUP (ORDER BY ABS(avg_radiant_rating - avg_dire_rating)) as p25,
+    percentile_cont(0.50) WITHIN GROUP (ORDER BY ABS(avg_radiant_rating - avg_dire_rating)) as p50,
+    percentile_cont(0.75) WITHIN GROUP (ORDER BY ABS(avg_radiant_rating - avg_dire_rating)) as p75
+FROM match_details
+WHERE avg_radiant_rating IS NOT NULL;
+
+SELECT 
+    AVG(avg_radiant_rating - avg_dire_rating) as mean_diff,
+    STDDEV(avg_radiant_rating - avg_dire_rating) as std_diff
+FROM match_details
+WHERE avg_radiant_rating IS NOT NULL;
+
+SELECT 
+    CASE 
+        WHEN ABS(avg_radiant_rating - avg_dire_rating) < 5   THEN '0-5'
+        WHEN ABS(avg_radiant_rating - avg_dire_rating) < 10  THEN '5-10'
+        WHEN ABS(avg_radiant_rating - avg_dire_rating) < 20  THEN '10-20'
+        ELSE '20+'
+    END as diff_bucket,
+    AVG(CAST("didRadiantWin" AS INT)) FILTER (WHERE avg_radiant_rating > avg_dire_rating) as accuracy,
+    COUNT(*) as matches
+FROM match_details
+WHERE avg_radiant_rating IS NOT NULL
+GROUP BY 1
+ORDER BY 1;
 
 --TODO Separate tables more
 

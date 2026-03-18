@@ -19,5 +19,6 @@ dependencies = [
     "psycopg[binary]>=3.3.2",
     "python-dotenv>=1.2.1",
     "ratelimit>=2.2.1",
+    "scikit-learn>=1.8.0",
     "tenacity>=9.1.4",
 ]

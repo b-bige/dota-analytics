@@ -11,27 +11,21 @@ from db_functions import DotaDB
 from basic_logger import setup_logger
 
 CORE_WEIGHTS = {
-    'gold_per_min':           0.20,
-    'xp_per_min':             0.15,
-    'hero_damage':            0.20,
-    'net_worth':              0.15,
-    'last_hits':              0.10,
-    'tower_damage':           0.08,
-    'kills':                  0.05,
-    'teamfight_participation': 0.05,
-    'lane_efficiency_pct':    0.02,
+    'gold_per_min':  0.40,  # dominant
+    'assists':       0.35,  # nearly as strong
+    'net_worth':     0.15,  # positive but weaker once gpm/assists included
+    'tower_damage':  0.07,  # positive
+    'kills':         0.03,  # weak positive
 }
 
 SUPPORT_WEIGHTS = {
-    'stuns':                  0.25,
-    'obs_placed':             0.15,
-    'sen_placed':             0.10,
-    'hero_healing':           0.15,
-    'xp_per_min':             0.10,
-    'teamfight_participation': 0.10,
-    'assists':                0.08,
-    'camps_stacked':          0.04,
-    'observer_kills':         0.03,
+    'gold_per_min':  0.35,  # still dominant even for supports
+    'assists':       0.40,  # strongest support signal
+    'net_worth':     0.12,  # positive
+    'tower_damage':  0.05,  # weak positive
+    'obs_placed':    0.05,  # weak positive
+    'observer_kills': 0.02,
+    'camps_stacked':  0.01,
 }
 
 STAT_COLS = [
@@ -40,13 +34,27 @@ STAT_COLS = [
     'lane_efficiency_pct', 'stuns', 'obs_placed', 'sen_placed',
     'hero_healing', 'assists', 'camps_stacked', 'observer_kills'
 ]
-
-MIN_SAMPLES = 30  # minimum games needed to trust hero/patch stats //KIND OF: TESTING NEEDED
+MIN_SAMPLES = input('Enter MIN_SAMPLES for stat calculation (leave blank for default 30): ')
+if not MIN_SAMPLES:
+    MIN_SAMPLES = 30
+else:
+    MIN_SAMPLES = int(MIN_SAMPLES)
 
 setup_logger(logfile_path='logs/calculate_rating.log')
 log = logging.getLogger(__name__)
 db = DotaDB(schema='public', local=True)
-model = PlackettLuce()
+NUMERATOR = input('Enter TAU numerator for rating model (leave blank for model default 25): ')
+DENOMINATOR = input('Enter TAU denominator for rating model (leave blank for model default 300): ')
+if not NUMERATOR:
+    NUMERATOR = 25
+else:
+    NUMERATOR = int(NUMERATOR)
+if not DENOMINATOR:
+    DENOMINATOR = 300
+else:
+    DENOMINATOR = int(DENOMINATOR)
+TAU = float(NUMERATOR / DENOMINATOR)
+model = PlackettLuce(tau=TAU)
 
 player_ratings = {}
 rating_history = []
@@ -57,6 +65,12 @@ global_stats = None
 baseline_cache = {}
 
 def main():
+    log.info(
+        f'Starting to calculating ratings for chosen values: \n \
+            MIN_SAMPLES: {MIN_SAMPLES} \n \
+            TAU NUMERATOR: {NUMERATOR} \n \
+            TAU DENOMINATOR: {DENOMINATOR}'
+        )
     log.info("Precomputing hero baselines...")
     global hero_patch_stats, hero_stats, patch_stats, global_stats, baseline_cache
     hero_patch_stats, hero_stats, patch_stats, global_stats = compute_hero_stats(db)
@@ -126,8 +140,8 @@ def main():
 
     history_df = pd.DataFrame(rating_history)
 
-    final_ratings.to_csv('data/player_ratings.csv', index=False)
-    history_df.to_csv('data/rating_history.csv', index=False)
+    final_ratings.to_csv(f'data/player_ratings_{MIN_SAMPLES}_{NUMERATOR}_{DENOMINATOR}.csv', index=False)
+    history_df.to_csv(f'data/rating_history_{MIN_SAMPLES}_{NUMERATOR}_{DENOMINATOR}.csv', index=False)
 
     log.info(f"Done. Rated {len(final_ratings):,} unique players.")
     log.info(f"Rating history: {len(history_df):,} entries.")
@@ -270,23 +284,25 @@ def process_match_with_players(match_id, players_df, radiant_win):
 
     # ── Store PRE-match ratings in history ───────────────────────────────────
     for pid, r in zip(radiant_ids, radiant_ratings):
-        rating_history.append({
-            'account_id': pid,
-            'match_id':   match_id,
-            'is_radiant': True,
-            'mu':         r.mu,
-            'sigma':      r.sigma,
-            'ordinal':    r.ordinal(),
-        })
+        if not isinstance(pid, str):
+            rating_history.append({
+                'account_id': pid,
+                'match_id':   match_id,
+                'is_radiant': True,
+                'mu':         r.mu,
+                'sigma':      r.sigma,
+                'ordinal':    r.ordinal(),
+            })
     for pid, r in zip(dire_ids, dire_ratings):
-        rating_history.append({
-            'account_id': pid,
-            'match_id':   match_id,
-            'is_radiant': False,
-            'mu':         r.mu,
-            'sigma':      r.sigma,
-            'ordinal':    r.ordinal(),
-        })
+        if not isinstance(pid, str):
+            rating_history.append({
+                'account_id': pid,
+                'match_id':   match_id,
+                'is_radiant': False,
+                'mu':         r.mu,
+                'sigma':      r.sigma,
+                'ordinal':    r.ordinal(),
+            })
         
     # Get weights
     radiant_weights, dire_weights = get_team_weights(radiant), get_team_weights(dire)

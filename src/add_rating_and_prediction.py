@@ -12,7 +12,16 @@ setup_logger(logfile_path='historical_rating_db.log')
 
 def main():
     db = DotaDB()
-    df = pd.read_csv('data/rating_history.csv').sort_values('match_id')
+    idx = 1
+    choices = {}
+    for item in os.listdir('data'):
+        if os.path.isfile(f'data/{item}'):
+            if item.startswith('rating_history'):
+                print(f'{idx} - {item}')
+                choices[idx] = item
+                idx += 1
+    selected = input('Select file: ')
+    df = pd.read_csv(f'data/{choices[int(selected)]}').sort_values('match_id')
     df = df[df['match_id'] > 6200000000]
 
     # compute avg ratings per match per side in one go
