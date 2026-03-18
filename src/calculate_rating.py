@@ -88,8 +88,9 @@ def main():
     ]
     log.info(f"{len(match_ids_with_players):,} matches have player data.")
 
-    _metadata_only = []
-    log.info(f"Skipped {len(_metadata_only)} matches with no player data.")
+    _metadata_only = [] 
+    #TODO calculate metadata only
+    log.info(f"Skipping -- matches with no player data.")
     BATCH_SIZE = 1000
     total = len(match_ids_with_players)
     for i in range(0, total, BATCH_SIZE):
