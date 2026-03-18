@@ -101,7 +101,8 @@ def update_match_container_and_pages(pathname, search, page_number, *args): #TOD
         select='''
             md.id, md."radiantTeamId", md."direTeamId",
             md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman",
-            radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName"
+            radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName", 
+            md.avg_radiant_rating, md.avg_dire_rating
         ''',
         order_by='ORDER BY md."startDateTimeHuman" ASC LIMIT %s OFFSET %s',
         extra_params=[PAGE_SIZE, offset]
@@ -110,7 +111,8 @@ def update_match_container_and_pages(pathname, search, page_number, *args): #TOD
     columns = [
         'match_id', 'radiant_team_id', 'dire_team_id',
         'radiant_win', 'duration', 'start_date',
-        'radiant_name', 'dire_name', 'radiant_logo', 'dire_logo', 'league_name'
+        'radiant_name', 'dire_name', 'radiant_logo', 'dire_logo', 'league_name',
+        'rad_rating', 'dire_rating'
     ]
     matches = [dict(zip(columns, row)) for row in db.query_select(query, params=params)]
     elements = [create_match_element(row) for row in matches]
@@ -140,10 +142,11 @@ def create_match_element(row: dict):
                     dmc.Badge('Radiant win', color=result_color, variant='filled') if row['radiant_win']
                     else dmc.Badge('Dire win', color=result_color, variant='filled'),
                     dmc.Badge(f'{row['league_name'] if row['league_name'] else 'League not found'}', variant='gradient')
-                ], pos='apart'),
-                dmc.Text(f'Duration: {row['duration']}', size='sm', c='dimmed'),
-                dmc.Text(f'Start date: {row['start_date']}', size='sm', c='dimmed'),
-                dmc.Text(f'ID: {row["match_id"]}', size='sm', c='dimmed')
+                ], pos='apart', mb='sm'),
+                dmc.Text(f'Ratings: {row['rad_rating']} vs {row['dire_rating']}', size='md', c='dimmed'),
+                dmc.Text(f'Duration: {row['duration']}', size='md', c='dimmed'),
+                dmc.Text(f'Start date: {row['start_date']}', size='md', c='dimmed'),
+                dmc.Text(f'ID: {row["match_id"]}', size='md', c='dimmed')
             ]
         ),
         href=f'/match/{row['match_id']}',

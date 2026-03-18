@@ -318,5 +318,10 @@ SELECT * FROM match_details WHERE id = 6321751509;
 
 SELECT * FROM match_details WHERE avg_radiant_rating IS NULL;
 
+SELECT DISTINCT "seriesId" FROM match_details;
+
+SELECT AVG(CAST("didRadiantWin" AS INT)) FROM match_details WHERE avg_radiant_rating > avg_dire_rating;
+SELECT AVG(CAST("didRadiantWin" AS INT)) FROM match_details WHERE avg_dire_rating > avg_radiant_rating;
+
 --TODO Separate tables more
 

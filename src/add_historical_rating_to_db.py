@@ -16,7 +16,7 @@ def main():
     df = df[df['match_id'] > 6200000000]
 
     # compute avg ratings per match per side in one go
-    avg_ratings = df.groupby(['match_id', 'is_radiant'])['mu'].mean().unstack('is_radiant')
+    avg_ratings = df.groupby(['match_id', 'is_radiant'])['ordinal'].mean().unstack('is_radiant')
     avg_ratings.columns = ['avg_dire_rating', 'avg_radiant_rating']  # False=dire, True=radiant
     avg_ratings = avg_ratings.reset_index()
 
