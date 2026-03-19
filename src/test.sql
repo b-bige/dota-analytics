@@ -355,5 +355,42 @@ WHERE avg_radiant_rating IS NOT NULL
 GROUP BY 1
 ORDER BY 1;
 
+SELECT 
+    mp."heroId" as hero_id,
+    md."gameVersionId",
+    AVG(CAST(mp."isVictory" AS INT)) as winrate,
+    COUNT(*) 
+FROM match_players mp
+JOIN match_details md ON md.id = mp.match_id
+GROUP BY mp."heroId", md."gameVersionId"
+HAVING COUNT(*) >= 20
+ORDER BY winrate DESC;
+
+SELECT 
+    LEAST(mp1."heroId", mp2."heroId")    as hero1,
+    GREATEST(mp1."heroId", mp2."heroId") as hero2,
+    AVG(CAST(mp1."isVictory" AS INT))    as pair_winrate,
+    COUNT(*)                            
+FROM match_players mp1
+JOIN match_players mp2 
+    ON mp1.match_id = mp2.match_id
+    AND mp1."heroId" < mp2."heroId"
+    AND mp1."isRadiant" = mp2."isRadiant"
+GROUP BY 1, 2
+HAVING COUNT(*) >= 15
+ORDER BY pair_winrate DESC;
+
+SELECT 
+    mp1."heroId" as hero_id,
+    mp2."heroId" as enemy_hero_id,
+    AVG(CAST(mp1."isVictory" AS INT)) as winrate_vs,
+    COUNT(*) 
+FROM match_players mp1
+JOIN match_players mp2
+    ON mp1.match_id = mp2.match_id
+    AND mp1."isRadiant" != mp2."isRadiant"
+GROUP BY 1, 2
+HAVING COUNT(*) >= 15;
+
 --TODO Separate tables more
 

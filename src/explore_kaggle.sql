@@ -18,3 +18,10 @@ SELECT COUNT(DISTINCT match_id) FROM main_metadata;
 
 SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name = 'main_metadata';
 
+SELECT COUNT(*) FROm main_metadata WHERE dire_team_id IS NULL;
+
+SELECT DISTINCT pms.match_id, mm.start_date_time 
+               FROM player_match_stats pms
+               JOIN main_metadata mm ON mm.match_id = pms.match_id
+               ORDER BY mm.start_date_time ASC
+

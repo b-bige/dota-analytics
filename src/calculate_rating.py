@@ -58,11 +58,16 @@ model = PlackettLuce(tau=TAU)
 
 player_ratings = {}
 rating_history = []
+draft_strengths = []
 hero_patch_stats = None
 hero_stats = None
 patch_stats = None
 global_stats = None
 baseline_cache = {}
+
+hero_winrates = None
+hero_synergy = None
+hero_counters = None
 
 def main():
     log.info(
@@ -74,6 +79,8 @@ def main():
     log.info("Precomputing hero baselines...")
     global hero_patch_stats, hero_stats, patch_stats, global_stats, baseline_cache
     hero_patch_stats, hero_stats, patch_stats, global_stats = compute_hero_stats(db)
+    global hero_winrates, hero_synergy, hero_counters 
+    hero_winrates, hero_synergy, hero_counters = compute_draft_features(db)
     for (hero_id, patch), row in hero_patch_stats.iterrows():
         for col in STAT_COLS:
             count = row[(col, 'count')]
@@ -102,9 +109,6 @@ def main():
     ]
     log.info(f"{len(match_ids_with_players):,} matches have player data.")
 
-    _metadata_only = [] 
-    #TODO calculate metadata only
-    log.info(f"Skipping -- matches with no player data.")
     BATCH_SIZE = 1000
     total = len(match_ids_with_players)
     for i in range(0, total, BATCH_SIZE):
@@ -139,9 +143,11 @@ def main():
     ]).sort_values('ordinal', ascending=False)
 
     history_df = pd.DataFrame(rating_history)
+    drafts_df = pd.DataFrame(draft_strengths)
 
     final_ratings.to_csv(f'data/player_ratings_{MIN_SAMPLES}_{NUMERATOR}_{DENOMINATOR}.csv', index=False)
     history_df.to_csv(f'data/rating_history_{MIN_SAMPLES}_{NUMERATOR}_{DENOMINATOR}.csv', index=False)
+    drafts_df.to_csv('data/draft_strength.csv')
 
     log.info(f"Done. Rated {len(final_ratings):,} unique players.")
     log.info(f"Rating history: {len(history_df):,} entries.")
@@ -269,9 +275,135 @@ def get_team_weights(team_df):
         return [1 / len(scores)] * len(scores)
     return [s / total for s in scores]
 
+def compute_draft_features(db: DotaDB):
+    query = '''
+        SELECT
+            hero_id,
+            patch,
+            AVG(win) AS winrate,
+            COUNT(*)
+        FROM player_match_stats
+        GROUP BY hero_id, patch
+        HAVING COUNT(*) >= 20
+        '''
+    hero_winrates = db.query_select_to_df(query, columns=['hero_id', 'patch', 'winrate', 'match_count'])
+    query = '''
+        SELECT 
+            LEAST(mp1.hero_id, mp2.hero_id)    as hero1,
+            GREATEST(mp1.hero_id, mp2.hero_id) as hero2,
+            AVG(mp1.win) as pair_winrate,
+            COUNT(*) 
+        FROM player_match_stats mp1
+        JOIN player_match_stats mp2 
+            ON mp1.match_id = mp2.match_id
+            AND mp1.hero_id < mp2.hero_id
+            AND mp1.is_radiant = mp2.is_radiant
+        GROUP BY 1, 2
+        HAVING COUNT(*) >= 20
+        '''
+    hero_synergy = db.query_select_to_df(query, columns=['hero_id1', 'hero_id2', 'pair_winrate', 'match_count'])
+    query = '''
+        SELECT 
+            mp1.hero_id as hero_id,
+            mp2.hero_id as enemy_hero_id,
+            AVG(mp1.win) as winrate_vs,
+            COUNT(*) as games
+        FROM player_match_stats mp1
+        JOIN player_match_stats mp2
+            ON mp1.match_id = mp2.match_id
+            AND mp1.is_radiant != mp2.is_radiant
+        GROUP BY 1, 2
+        HAVING COUNT(*) >= 20
+        '''
+    hero_counters = db.query_select_to_df(query, columns=['hero_id', 'enemy_hero_id', 'winrate_vs', 'match_count'])
+    hero_winrates['winrate']      = hero_winrates['winrate'].astype(float)
+    hero_synergy['pair_winrate']  = hero_synergy['pair_winrate'].astype(float)
+    hero_counters['winrate_vs']   = hero_counters['winrate_vs'].astype(float)
+    return hero_winrates, hero_synergy, hero_counters
+
+def calculate_draft_strength(team_heroes, enemy_heroes, patch,
+                   hero_winrates, hero_synergy, hero_counters):
+    """
+    Compute a draft strength score for a team given their heroes and the enemy heroes.
+    Returns a float — higher is stronger draft.
+
+    team_heroes:  list of hero_ids for this team
+    enemy_heroes: list of hero_ids for the enemy team
+    patch:        current patch int
+    """
+    # ── 1. Individual hero win rates ─────────────────────────────────────────
+    wr_scores = []
+    for hero_id in team_heroes:
+        # try patch-specific first, fall back to overall
+        patch_wr = hero_winrates[
+            (hero_winrates['hero_id'] == hero_id) &
+            (hero_winrates['patch'] == patch) 
+        ]['winrate']
+
+        if len(patch_wr) > 0:
+            wr_scores.append(patch_wr.iloc[0])
+        else:
+            overall_wr = hero_winrates[
+                (hero_winrates['hero_id'] == hero_id)
+            ]['winrate']
+            if len(overall_wr) > 0:
+                wr_scores.append(overall_wr.mean())
+            else:
+                wr_scores.append(0.50)  # unknown hero — assume neutral
+
+    hero_wr_score = np.mean(wr_scores)
+
+    # ── 2. Team synergy — all hero pairs ────────────────────────────────────
+    synergy_scores = []
+    for i, h1 in enumerate(team_heroes):
+        for h2 in team_heroes[i+1:]:
+            key_h1 = min(h1, h2)
+            key_h2 = max(h1, h2)
+            pair = hero_synergy[
+                (hero_synergy['hero_id1'] == key_h1) &
+                (hero_synergy['hero_id2'] == key_h2) 
+            ]['pair_winrate']
+            if len(pair) > 0:
+                synergy_scores.append(pair.iloc[0])
+
+    synergy_score = np.mean(synergy_scores) if synergy_scores else 0.50
+
+    # ── 3. Counter score — how well this team counters the enemy ────────────
+    counter_scores = []
+    for hero_id in team_heroes:
+        for enemy_id in enemy_heroes:
+            matchup = hero_counters[
+                (hero_counters['hero_id'] == hero_id) &
+                (hero_counters['enemy_hero_id'] == enemy_id) 
+            ]['winrate_vs']
+            if len(matchup) > 0:
+                counter_scores.append(matchup.iloc[0])
+
+    counter_score = np.mean(counter_scores) if counter_scores else 0.50
+
+    # ── Weighted combination ─────────────────────────────────────────────────
+    draft_score = (
+        hero_wr_score  * 0.40 +
+        synergy_score  * 0.35 +
+        counter_score  * 0.25
+    )
+    return draft_score
+    
 def process_match_with_players(match_id, players_df, radiant_win):
     radiant = assign_roles(players_df[players_df['is_radiant'] == True].copy())
     dire    = assign_roles(players_df[players_df['is_radiant'] == False].copy())
+
+    radiant_heroes = radiant['hero_id'].tolist()
+    dire_heroes    = dire['hero_id'].tolist()
+    patch          = players_df['patch'].iloc[0]
+    radiant_draft = calculate_draft_strength(
+        radiant_heroes, dire_heroes, patch,
+        hero_winrates, hero_synergy, hero_counters
+    )
+    dire_draft = calculate_draft_strength(
+        dire_heroes, radiant_heroes, patch,
+        hero_winrates, hero_synergy, hero_counters
+    )
 
     if len(radiant) == 0 or len(dire) == 0:
         return
@@ -303,6 +435,12 @@ def process_match_with_players(match_id, players_df, radiant_win):
                 'sigma':      r.sigma,
                 'ordinal':    r.ordinal(),
             })
+    
+    draft_strengths.append({
+        'match_id': match_id,
+        'rad_draft_strength': radiant_draft,
+        'dire_draft_strength': dire_draft
+    })
         
     # Get weights
     radiant_weights, dire_weights = get_team_weights(radiant), get_team_weights(dire)
