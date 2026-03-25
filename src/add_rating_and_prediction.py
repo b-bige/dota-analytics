@@ -21,7 +21,9 @@ def main():
                 choices[idx] = item
                 idx += 1
     selected = input('Select file: ')
-    df = pd.read_csv(f'data/{choices[int(selected)]}').sort_values('match_id')
+    file = f'data/{choices[int(selected)]}'
+    logging.info(f'Saving ratings from file: {file}')
+    df = pd.read_csv(file).sort_values('match_id')
     df = df[df['match_id'] > 6200000000]
 
     # compute avg ratings per match per side in one go
