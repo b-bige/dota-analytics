@@ -170,7 +170,7 @@ def update_filter_state(*args):
 
     data = []
     for f in FILTERS:
-        if f.filter_name != 'durations':
+        if f.filter_name not in ['durations', 'heroes']:
             data.extend(f.get_outputs(triggered, **filters))
     return tuple(data)
 

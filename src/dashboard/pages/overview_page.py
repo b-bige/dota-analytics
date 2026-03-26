@@ -192,15 +192,23 @@ def update_overview(pathname, graph_select, *args):
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
     try:
+        if filters['heroes']:
+            query, params = qb.build('md.id')
+            ids = [r[0] for r in db.query_select(query, params=params)]
+            qb_heroes = QueryBuilder()
+            qb_heroes.where('md.id = ANY(%s)', ids)
+            qb_heroes = Filter.handle_filters(qb_heroes, **filters, exclude='heroes')
+        else:
+            qb_heroes = qb.copy()
         match graph_select:
             case 'win':
-                top_heroes_fig = fig_top_winrate(qb.copy(), found_matches)
+                top_heroes_fig = fig_top_winrate(qb_heroes.copy(), found_matches)
             case 'pick':
-                top_heroes_fig = fig_most_picked(qb.copy(), found_matches)
+                top_heroes_fig = fig_most_picked(qb_heroes.copy(), found_matches)
             case 'ban':
-                top_heroes_fig = fig_most_banned(qb.copy(), found_matches)
+                top_heroes_fig = fig_most_banned(qb_heroes.copy(), found_matches)
             case 'pres':
-                top_heroes_fig = fig_most_present(qb.copy(), found_matches)      
+                top_heroes_fig = fig_most_present(qb_heroes.copy(), found_matches)      
     except:
         top_heroes_fig = None
     duration_fig = fig_duration_hist(qb.copy())

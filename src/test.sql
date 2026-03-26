@@ -397,5 +397,16 @@ SELECT MIN("startDateTimeHuman") FROM match_details;
 SELECT AVG(CAST(("didRadiantWin" = predicted_radiant_win) AS INT)) AS correct
 FROM match_details;
 
+SELECT
+    *
+FROM match_details
+WHERE id IN 
+(SELECT md.id FROM match_details md
+INNER JOIN match_players mp ON mp.match_id = md.id LEFT JOIN hero_details hd ON hd.id = mp."heroId"
+WHERE 1=1 AND (hd."displayName" = 'Anti-Mage'));
+
+SELECT md.id, DISTINCT name FROM match_details md
+INNER JOIN patches p ON p.id = md."gameVersionId"
+
 --TODO Separate tables more
 
