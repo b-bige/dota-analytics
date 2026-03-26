@@ -392,5 +392,10 @@ JOIN match_players mp2
 GROUP BY 1, 2
 HAVING COUNT(*) >= 15;
 
+SELECT MIN("startDateTimeHuman") FROM match_details;
+
+SELECT AVG(CAST(("didRadiantWin" = predicted_radiant_win) AS INT)) AS correct
+FROM match_details;
+
 --TODO Separate tables more
 
