@@ -263,33 +263,35 @@ class DurationsFilter(Filter):
         return None
 
     def render(self, value, data):
-        return html.Div([
-            dmc.Text('Duration', size='sm', fw=500, mt=5),
-            html.Div(
-                style={
-                    'justifyContent': 'center',
-                    'display': 'flex',
-                    'width': '100%',
-                    'paddingLeft': '10px',
-                    'paddingRight': '10px'
-                },
-                children=dmc.RangeSlider(
-                    id='durations-filter',
-                    showLabelOnHover=True,
-                    step=1,
-                    marks=[
-                        {"value": 0,   "label": "0"},
-                        {'value': self.db_max_duration, 'label': f'{self.db_max_duration}m'}
-                    ],
-                    min=0,
-                    max=self.db_max_duration,
-                    value=value,
-                    mt='md',
-                    mb='xl',
-                    w='100%'
-                ),
-            )
-        ])
+        return html.Div(
+            children=[
+                dmc.Text('Duration', size='sm', fw=500, mt=5),
+                html.Div(
+                    style={
+                        'justifyContent': 'center',
+                        'display': 'flex',
+                        'width': '100%',
+                        'paddingLeft': '10px',
+                        'paddingRight': '10px'
+                    },
+                    children=dmc.RangeSlider(
+                        id='durations-filter',
+                        showLabelOnHover=True,
+                        step=1,
+                        marks=[
+                            {"value": 0,   "label": "0"},
+                            {'value': self.db_max_duration, 'label': f'{self.db_max_duration}m'}
+                        ],
+                        min=0,
+                        max=self.db_max_duration,
+                        value=value,
+                        mt='md',
+                        mb='xl',
+                        w='100%'
+                    ),
+                )
+            ]
+        )
 
 class DatesFilter(Filter):
     filter_name = 'dates'
@@ -346,7 +348,10 @@ class DatesFilter(Filter):
             maxDate=data[1],
             value=value,
             defaultDate=default_date,
-            mt='md'
+            mt='md',
+            w='100%',
+            px=10,
+            style={'boxSizing': 'border-box'}
         )
     
     def get_outputs(self, triggered_component_id, **filters) -> list:

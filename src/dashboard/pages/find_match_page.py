@@ -34,7 +34,13 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
                 h=600, # Fixed height helps with ScrollArea behavior
                 offsetScrollbars=True,
                 children=[
-                    dmc.Stack(id='match-container', children=[])
+                    dmc.SimpleGrid(
+                        id='match-container', 
+                        cols=2,        # Force 2 items per row
+                        spacing="md",  # Gap between cards,
+                        mt=10,
+                        children=[]
+                    )
                 ]
             ),
             dmc.Space(h="md"),
@@ -63,7 +69,7 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
-def update_match_container_and_pages(pathname, search, page_number, *args): #TODO: Add pagination
+def update_match_container_and_pages(pathname, search, page_number, *args): 
     if pathname != '/find-match':
         return no_update
     triggered = ctx.triggered_id
@@ -116,40 +122,77 @@ def update_match_container_and_pages(pathname, search, page_number, *args): #TOD
     ]
     matches = [dict(zip(columns, row)) for row in db.query_select(query, params=params)]
     elements = [create_match_element(row) for row in matches]
+    # elements = [create_match_element(row) for row in matches]
     return elements, total_pages, page_number
     
 
 def create_match_element(row: dict):
     result_color = COLORS['radiant'] if row['radiant_win'] else COLORS['dire']
     row['duration'] = convert_duration_format(row['duration'])
+    league = row.get('league_name', None)
     return dcc.Link(
-        dmc.Paper(
-            withBorder=True,
-            shadow='sm',
-            p='md',
-            mb='sm', # Margin bottom for spacing
-            children=[
-                dmc.Group([
-                    dmc.Image(
-                        src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg',
-                        w=50
-                    ),
-                    dmc.Text(f'{row['radiant_name']} vs {row['dire_name']}'),
-                    dmc.Image(
-                        src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg',
-                        w=50
-                    ),
-                    dmc.Badge('Radiant win', color=result_color, variant='filled') if row['radiant_win']
-                    else dmc.Badge('Dire win', color=result_color, variant='filled'),
-                    dmc.Badge(f'{row['league_name'] if row['league_name'] else 'League not found'}', variant='gradient')
-                ], pos='apart', mb='sm'),
-                dmc.Text(f'Ratings: {row['rad_rating']} vs {row['dire_rating']}', size='md', c='dimmed'),
-                dmc.Text(f'Duration: {row['duration']}', size='md', c='dimmed'),
-                dmc.Text(f'Start date: {row['start_date']}', size='md', c='dimmed'),
-                dmc.Text(f'ID: {row["match_id"]}', size='md', c='dimmed')
-            ]
-        ),
-        href=f'/match/{row['match_id']}',
+        href=f"/match/{row['match_id']}",
         refresh=False,
-        style={'textDecoration': 'none', 'color': 'inherit'}
+        # Make the link fill its grid slot, without weird blue underlines
+        style={'textDecoration': 'none', 'color': 'inherit', 'display': 'block'}, 
+        children=[
+            dmc.Paper(
+                withBorder=True,
+                shadow='sm',
+                p='md',
+                radius='md',
+                # A subtle hover effect makes it feel like an interactive app
+                style={"transition": "transform 0.2s ease"},
+                className="match-card-hover",
+                children=[
+                    
+                    # 1. HEADER: League & Match Result
+                    dmc.Group(
+                        justify="space-between",
+                        mb="md",
+                        children=[
+                            dmc.Badge(league, variant='gradient') if league else dmc.Badge('Unknown league', variant='outline'),
+                            dmc.Badge('Radiant Win' if row['radiant_win'] else 'Dire Win', color=result_color, variant='filled')
+                        ]
+                    ),
+                    
+                    # 2. BODY: The "VS" Matchup
+                    dmc.Group(
+                        justify="center", # Center the teams
+                        gap="xl",         # Large gap between Team A, VS, and Team B
+                        children=[
+                            # Radiant Side
+                            dmc.Stack(align="center", gap=0, children=[
+                                dmc.Image(src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
+                                dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm"),
+                                dmc.Text(f"MMR: {round(row['rad_rating'], 2)}", size="xs", c="dimmed")
+                            ]),
+                            
+                            # The "VS" Text
+                            dmc.Text("VS", fw=900, size="lg", c="dimmed"),
+                            
+                            # Dire Side
+                            dmc.Stack(align="center", gap=0, children=[
+                                dmc.Image(src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
+                                dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm"),
+                                dmc.Text(f"MMR: {round(row['dire_rating'], 2)}", size="xs", c="dimmed")
+                            ])
+                        ]
+                    ),
+                    
+                    # Divider to separate stats
+                    dmc.Divider(variant="dashed", my="sm"),
+                    
+                    # 3. FOOTER: Match Metadata
+                    dmc.Group(
+                        justify="space-between",
+                        children=[
+                            dmc.Text(f"📅 {row['start_date']}", size="xs", c="dimmed"),
+                            dmc.Text(f"⏱️ {row['duration']}", size="xs", c="dimmed"),
+                            dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
+                        ]
+                    )
+                ]
+            )
+        ]
     )

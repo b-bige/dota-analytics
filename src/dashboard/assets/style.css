@@ -1,0 +1,10 @@
+.match-card-hover {
+    transition: all 0.2s ease-in-out !important;
+    cursor: pointer;
+}
+
+.match-card-hover:hover {
+    transform: translateY(-4px); /* Lifts the card */
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15) !important; /* Deepens shadow */
+    border-color: #3498db !important; /* Optional: Highlights border with Mantine Blue */
+}

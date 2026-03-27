@@ -231,7 +231,7 @@ def sync_sidebar_from_url(pathname, search):
         )
         for f in FILTERS
     ]
-    return dmc.ScrollArea(p="md", children=components)
+    return dmc.Stack(p="sm", gap=5, children=components)
 
 if __name__ == '__main__':
     app.run(debug=True)
