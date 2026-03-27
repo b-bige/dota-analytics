@@ -31,7 +31,6 @@ def layout(**kwargs):
                 stat_card("Total Matches", id="total-matches"),
                 stat_card("Win Rate (Radiant)", id="stat-radiant-win"),
                 stat_card("Avg Game Length", id="stat-avg-duration"),
-                # stat_card("Avg Kills", id="stat-total-kills"),
             ]
         ),
         html.Div(
@@ -75,55 +74,32 @@ def layout(**kwargs):
                 ),
             ]
         ),
-        html.Div(
-            style={
-                "display": "flex",
-                "width": "100%",
-                'alignItems': 'flex-start'
-            },
+        dmc.SimpleGrid(
+            cols={"base": 1, "lg": 2}, # 1 column on small screens, 2 on large
+            spacing="xl",
+            mt="md",
             children=[
+                dmc.LoadingOverlay(
+                    visible=False,
+                    id="loading-overlay",
+                    overlayProps={"radius": "sm", "blur": 2},
+                    zIndex=10,
+                ),
                 dcc.Graph(
                     id='top-heroes',
-                    figure=_winrate_fig
+                    figure=_winrate_fig,
+                    responsive=True, # Crucial: tells Plotly to listen for resize events
+                    style={"width": "100%"}
                 ),
                 dcc.Graph(
                     id='duration-distr',
-                    figure=_duration_fig
+                    figure=_duration_fig,
+                    responsive=True,
+                    style={"width": "100%"}
                 )
             ]
-        ),
+        )
     ]
-
-# html.Div(
-#     style={
-#         "display": "flex",
-#         "width": "50%",
-#         'alignItems': 'flex-start' 
-#     },
-#     children=[
-#         dmc.Select(
-#             id='duration-lane-select',
-#             label='Choose Lane',
-#             data=[
-#                 {'value': 'safe', 'label': 'Safe Lane'},
-#                 {'value': 'mid', 'label': 'Mid Lane'},
-#                 {'value': 'off', 'label': 'Off lane'}
-#             ],
-#             w=300
-#         ),
-#         dmc.Select(
-#             id='duration-sort-select',
-#             label='Sort by',
-#             data=[
-#                 {'value': 'winrate', 'label': 'Win-rate'},
-#                 {'value': 'count', 'label': 'Times played'}
-#             ],
-#             value='win',
-#             w=300,
-#             mb='md'
-#         )
-#     ]
-# ),
 
 @callback(
         Output('error-card', 'children'),

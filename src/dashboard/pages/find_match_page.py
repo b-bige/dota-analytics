@@ -130,6 +130,16 @@ def create_match_element(row: dict):
     result_color = COLORS['radiant'] if row['radiant_win'] else COLORS['dire']
     row['duration'] = convert_duration_format(row['duration'])
     league = row.get('league_name', None)
+    rad_rating = row.get('rad_rating', None)
+    dire_rating = row.get('dire_rating', None)
+    if rad_rating:
+        rad_rating = round(rad_rating, 2)
+    else:
+        rad_rating = '-'
+    if dire_rating:
+        dire_rating = round(dire_rating, 2)
+    else:
+        dire_rating = '-'
     return dcc.Link(
         href=f"/match/{row['match_id']}",
         refresh=False,
@@ -165,7 +175,7 @@ def create_match_element(row: dict):
                             dmc.Stack(align="center", gap=0, children=[
                                 dmc.Image(src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
                                 dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm"),
-                                dmc.Text(f"MMR: {round(row['rad_rating'], 2)}", size="xs", c="dimmed")
+                                dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed")
                             ]),
                             
                             # The "VS" Text
@@ -175,7 +185,7 @@ def create_match_element(row: dict):
                             dmc.Stack(align="center", gap=0, children=[
                                 dmc.Image(src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
                                 dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm"),
-                                dmc.Text(f"MMR: {round(row['dire_rating'], 2)}", size="xs", c="dimmed")
+                                dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed")
                             ])
                         ]
                     ),

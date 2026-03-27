@@ -83,6 +83,12 @@ app.layout = dmc.MantineProvider(
                                                     href='/find-match?page=1',
                                                     style={'textDecoration': 'none', 'color': 'inherit'}
                                                 ),
+                                                dcc.Link(
+                                                    dmc.TabsTab('Live matches', value='live-matches'),
+                                                    id='navbar-live-matches',
+                                                    href='/live-matches',
+                                                    style={'textDecoration': 'none', 'color': 'inherit'}
+                                                )
                                             ],
                                             justify='flex-start',
                                             gap="xl", # Mantine way to add spacing between items
@@ -127,6 +133,8 @@ def set_tab(pathname):
         return 'overview'
     elif pathname == '/find-match':
         return 'find-match'
+    elif pathname == '/live-matches': 
+        return 'live-matches'
 
 @app.callback(
         Output(component_id='header-badge', component_property='children'),
@@ -217,7 +225,7 @@ def update_url_from_filters_find_match(pathname, page_number, *args):
 )
 def sync_sidebar_from_url(pathname, search):
     if pathname not in ['/find-match', '/']:
-        return no_update
+        return dmc.Stack(children=[])
     params = parse_qs(search.lstrip('?'))
 
     filters = {

@@ -205,7 +205,7 @@ def fig_most_picked(qb: QueryBuilder, match_count):
     fig = apply_fig_theme(fig)
     fig.update_layout(
         title="Top 5 picked heroes",
-        width=600,
+        autosize=True,
         xaxis=dict(title_text='Pick rate', tickformat=".0%", range=[0, max(most_picked['picks']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
@@ -245,7 +245,7 @@ def fig_most_banned(qb:QueryBuilder, match_count):
     fig = apply_fig_theme(fig)
     fig.update_layout(
         title="Top 5 banned heroes",
-        width=600,
+        autosize=True,
         xaxis=dict(title_text='Ban rate', tickformat=".0%", range=[0, max(most_banned['bans']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
@@ -294,7 +294,7 @@ def fig_top_winrate(qb: QueryBuilder, match_count):
     fig = apply_fig_theme(fig)
     fig.update_layout(
         title="Top 5 heroes by winrate",
-        width=600,
+        autosize=True,
         xaxis=dict(title_text='Winrate', tickformat=".0%",
                    range=[0, max(winrates['winrate']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
@@ -334,7 +334,7 @@ def fig_most_present(qb: QueryBuilder, match_count):
     fig = apply_fig_theme(fig)
     fig.update_layout(
         title="Top 5 present heroes",
-        width=600,
+        autosize=True,
         xaxis=dict(title_text='Presence rate', tickformat=".0%", range=[0, max(most_present['presence']) * 1.15], showgrid=False),
         yaxis=dict(showgrid=False)
     )
@@ -358,7 +358,7 @@ def fig_duration_hist(qb: QueryBuilder):
     )
     fig.update_layout(
         title="Match duration",
-        width=600,
+        autosize=True,
         xaxis=dict(showgrid=False, title_text='Match Duration Distribution', ticksuffix='m'),
         yaxis=dict(showgrid=False, title_text='Number of Matches'),
         showlegend=False
