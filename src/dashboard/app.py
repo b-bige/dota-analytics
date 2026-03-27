@@ -245,6 +245,6 @@ def sync_sidebar_from_url(pathname, search):
 
 if __name__ == '__main__':
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        t = threading.Thread(target=monitor.run_forever, args=(60,), daemon=True)
+        t = threading.Thread(target=monitor.run_forever, args=(180,), daemon=True)
         t.start()
     app.run(debug=True)

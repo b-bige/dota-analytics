@@ -20,7 +20,7 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         children=[ 
             dcc.Interval(id='live-update-timer', interval=30*1000, n_intervals=0),
             dmc.ScrollArea(
-                h=600, # Fixed height helps with ScrollArea behavior
+                h=700, # Fixed height helps with ScrollArea behavior
                 offsetScrollbars=True,
                 children=[
                     dmc.SimpleGrid(
@@ -45,6 +45,7 @@ def update_live_ui(n):
         return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")
     columns = [
         'match_id', 'league_id', 'league_name', 'start_date',
+        'radiant_id', 'dire_id',
         'radiant_name', 'dire_name',
         'radiant_logo', 'dire_logo',
         'radiant_score', 'dire_score', 
@@ -66,7 +67,7 @@ def create_live_match_card(row):
         radius='md',
         # A subtle hover effect makes it feel like an interactive app
         style={"transition": "transform 0.2s ease"},
-        className="match-card-hover",
+        # className="match-card-hover",
         children=[
             # 1. HEADER: League & Match Result
             dmc.Group(

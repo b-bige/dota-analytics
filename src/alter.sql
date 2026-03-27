@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS live_matches (
     league_id INTEGER,
     league_name TEXT,
     start_date_time TIMESTAMP,
+    radiant_id BIGINT,
+    dire_id BIGINT,
     radiant_name TEXT,
     dire_name TEXT,
     radiant_logo TEXT,
@@ -34,4 +36,8 @@ CREATE TABLE IF NOT EXISTS live_matches (
 
 ALTER TABLE live_matches ADD COLUMN league_name TEXT;
 
-DROP TABLE live_matches;
+CREATE TABLE team_logos (
+    team_id BIGINT,
+    logo_url TEXT
+);
+
