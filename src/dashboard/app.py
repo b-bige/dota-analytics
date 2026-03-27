@@ -28,6 +28,8 @@ import time
 
 from theme import *
 from dashboard.filters import *
+import threading
+from live_match_monitor import monitor
 
 db = DotaDB(schema='public')
 setup_logger(logfile_path='logs/dashboard_app.log')
@@ -242,4 +244,7 @@ def sync_sidebar_from_url(pathname, search):
     return dmc.Stack(p="sm", gap=5, children=components)
 
 if __name__ == '__main__':
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        t = threading.Thread(target=monitor.run_forever, args=(60,), daemon=True)
+        t.start()
     app.run(debug=True)

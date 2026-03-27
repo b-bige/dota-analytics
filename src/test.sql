@@ -406,7 +406,12 @@ INNER JOIN match_players mp ON mp.match_id = md.id LEFT JOIN hero_details hd ON 
 WHERE 1=1 AND (hd."displayName" = 'Anti-Mage'));
 
 SELECT md.id, DISTINCT name FROM match_details md
-INNER JOIN patches p ON p.id = md."gameVersionId"
+INNER JOIN patches p ON p.id = md."gameVersionId";
+
+SELECT * FROM live_matches;
+
+SELECT "displayName" FROM league_details WHERE id = 18867;
+
+SELECT * FROM live_matches;
 
 --TODO Separate tables more
-

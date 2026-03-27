@@ -7,10 +7,15 @@ def setup_logger(logfile_path):
     log_dir = os.path.join(os.getcwd(), 'logs')
     os.makedirs(log_dir, exist_ok=True)
 
+    # 1. CRITICAL: Clear existing handlers so hot-reloads don't stack them
+    
+
     # 1. Setup the Root Logger to catch everything (DEBUG or INFO)
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO) 
-
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear() 
+    root_logger.setLevel(logging.INFO)
+    
     # 2. Console Handler: Shows everything INFO and above
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO) 
@@ -23,7 +28,7 @@ def setup_logger(logfile_path):
         backupCount=10
     )
     file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    file_handler.setFormatter(logging.Formatter('[PID: %(process)d] %(asctime)s - %(levelname)s - %(message)s'))
 
     # 4. Add both to the root
     root_logger.addHandler(console_handler)

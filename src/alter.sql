@@ -15,3 +15,23 @@ ADD COLUMN avg_dire_rating DOUBLE PRECISION;
 
 ALTER TABLE match_details
 ADD COLUMN predicted_radiant_win BOOLEAN;
+
+CREATE TABLE IF NOT EXISTS live_matches (
+    match_id BIGINT PRIMARY KEY,
+    league_id INTEGER,
+    league_name TEXT,
+    start_date_time TIMESTAMP,
+    radiant_name TEXT,
+    dire_name TEXT,
+    radiant_logo TEXT,
+    dire_logo TEXT,
+    radiant_score INTEGER DEFAULT 0,
+    dire_score INTEGER DEFAULT 0,
+    game_time INTEGER, -- Seconds since start
+    radiant_lead INTEGER, -- Positive for Radiant, Negative for Dire
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE live_matches ADD COLUMN league_name TEXT;
+
+DROP TABLE live_matches;
