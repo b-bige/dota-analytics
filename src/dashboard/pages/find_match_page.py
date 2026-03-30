@@ -7,6 +7,8 @@ from urllib.parse import parse_qs
 
 import os
 import sys
+import logging
+logger = logging.getLogger(__name__)
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DASHBOARD_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../"))
 SRC_DIR = os.path.abspath(os.path.join(DASHBOARD_DIR, '../'))

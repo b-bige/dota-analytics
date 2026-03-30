@@ -32,6 +32,7 @@ import threading
 from live_match_monitor import monitor
 
 db = DotaDB(schema='public')
+listener = setup_logger(logfile_path='logs/dashboard.log')
 app = Dash(__name__, use_pages=True, suppress_callback_exceptions=True)
 
 server = app.server
@@ -243,12 +244,7 @@ def sync_sidebar_from_url(pathname, search):
     return dmc.Stack(p="sm", gap=5, children=components)
 
 if __name__ == '__main__':
-    setup_logger(logfile_path='logs/dashboard_app.log')
-    is_production = os.environ.get("IS_PRODUCTION", "False") == "True"
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        print(not is_production)
-        logging.info(f'{not is_production}')
         t = threading.Thread(target=monitor.run_forever, args=(60,), daemon=True)
         t.start()
-    
-    app.run(debug=not is_production)
+    app.run(debug=True)

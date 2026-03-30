@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 
 import time
 import logging
+logger = logging.getLogger(__name__)
 
 from theme import PLOTLY_COLORSCALES, COLORS
 

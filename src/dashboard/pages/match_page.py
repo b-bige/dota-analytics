@@ -2,6 +2,8 @@ import dash
 from dash import html
 import dash_mantine_components as dmc
 from app_functions import *
+import logging
+logger = logging.getLogger(__name__)
 
 vs_logo = dmc.Avatar(
     "VS",

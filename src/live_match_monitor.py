@@ -9,10 +9,8 @@ sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
 import logging
-from basic_logger import setup_logger
 
 from db_functions import DotaDB
-setup_logger(logfile_path='logs/live-match-monitor.log')
 
 class LiveMatchMonitor:
     def __init__(self, db: DotaDB):
@@ -122,4 +120,3 @@ class LiveMatchMonitor:
             time.sleep(interval)
 
 monitor = LiveMatchMonitor(DotaDB())
-monitor.run_forever()
