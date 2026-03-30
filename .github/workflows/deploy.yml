@@ -30,7 +30,7 @@ jobs:
             
             uv sync
             
-            sudo systemctl restart dota-monitor.service
+            sudo systemctl restart dota-live-monitor.service
             sudo systemctl restart dota-dashboard.service
             
             # Check status of both
