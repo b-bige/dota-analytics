@@ -34,8 +34,6 @@ CREATE TABLE IF NOT EXISTS live_matches (
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE live_matches ADD COLUMN league_name TEXT;
-
 CREATE TABLE team_logos (
     team_id BIGINT,
     logo_url TEXT

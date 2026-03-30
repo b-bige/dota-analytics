@@ -412,6 +412,8 @@ SELECT * FROM live_matches;
 
 SELECT "displayName" FROM league_details WHERE id = 18867;
 
-SELECT * FROM live_matches;
+SELECT * FROM live_matches WHERE is_finished;
+
+SELECT * FROM league_details WHERE id = 18867;
 
 --TODO Separate tables more

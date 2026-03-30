@@ -29,9 +29,10 @@ dash.register_page(__name__, path='/find-match')
 # Dash Pages allows 'layout' to be a function to capture search params
 def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
+        size='lg',
         children=[ 
             dmc.ScrollArea(
-                h=600, # Fixed height helps with ScrollArea behavior
+                h=550, # Fixed height helps with ScrollArea behavior
                 offsetScrollbars=True,
                 children=[
                     dmc.SimpleGrid(

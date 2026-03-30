@@ -17,10 +17,11 @@ dash.register_page(__name__, path='/live-matches')
 
 def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
+        size='lg', 
         children=[ 
             dcc.Interval(id='live-update-timer', interval=30*1000, n_intervals=0),
             dmc.ScrollArea(
-                h=700, # Fixed height helps with ScrollArea behavior
+                h=600, # Fixed height helps with ScrollArea behavior
                 offsetScrollbars=True,
                 children=[
                     dmc.SimpleGrid(
@@ -31,7 +32,8 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
                         children=[]
                     )
                 ]
-            )
+            ),
+            dmc.Space(h='md')
         ]
     )
 
@@ -50,7 +52,7 @@ def update_live_ui(n):
         'radiant_logo', 'dire_logo',
         'radiant_score', 'dire_score', 
         'game_time', 'radiant_lead',
-        'last_updated'
+        'last_updated', 'is_finished'
     ]
     matches = [dict(zip(columns, row)) for row in results]
     return [create_live_match_card(row) for row in matches]
@@ -60,6 +62,8 @@ def create_live_match_card(row):
     is_radiant_lead = radiant_lead > 0
     lead_color = COLORS['radiant'] if is_radiant_lead else COLORS['dire']
     game_time = convert_duration_format(row['game_time'])
+    league = row['league_name']
+    is_unknown_League = (league == 'Unknown League')
     return dmc.Paper(
         withBorder=True,
         shadow='sm',
@@ -74,30 +78,51 @@ def create_live_match_card(row):
                 justify="space-between",
                 mb="md",
                 children=[
-                    dmc.Badge(row['league_name'], variant='gradient'),
+                    dmc.Group(
+                        children=[
+                            dmc.Badge(league, variant='outline' if is_unknown_League else 'gradient'),
+                            dmc.Badge('Finished', variant='filled') if row['is_finished'] else None,
+                        ]
+                    ),
                     dmc.Badge('Radiant Lead' if is_radiant_lead else 'Dire Lead', color=lead_color, variant='filled')
                 ]
             ),
             
             # 2. BODY: The "VS" Matchup
             dmc.Group(
-                justify="center", # Center the teams
-                gap="xl",         # Large gap between Team A, VS, and Team B
+                justify="center", 
+                gap="xl",         
                 children=[
-                    # Radiant Side
-                    dmc.Stack(align="center", gap=0, children=[
-                        dmc.Image(src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
-                        dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm"),
-                    ]),
+                    # Radiant Side - Fixed width ensures symmetry
+                    dmc.Stack(
+                        align="center", 
+                        gap=0, 
+                        w=150, # <--- Add this
+                        children=[
+                            dmc.Image(
+                                src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
+                                w=50, h=50, fit="contain"
+                            ),
+                            dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
+                        ]
+                    ),
                     
                     # The "VS" Text
                     dmc.Text("VS", fw=900, size="lg", c="dimmed"),
                     
-                    # Dire Side
-                    dmc.Stack(align="center", gap=0, children=[
-                        dmc.Image(src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
-                        dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm"),
-                    ])
+                    # Dire Side - Same fixed width
+                    dmc.Stack(
+                        align="center", 
+                        gap=0, 
+                        w=150, # <--- Add this
+                        children=[
+                            dmc.Image(
+                                src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
+                                w=50, h=50, fit="contain"
+                            ),
+                            dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
+                        ]
+                    )
                 ]
             ),
             

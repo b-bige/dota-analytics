@@ -18,19 +18,22 @@ class LiveMatchMonitor:
     def __init__(self, db: DotaDB):
         self.db = db
         self.logo_cache = {}
+        self.httpx_client = httpx.Client()
 
     def update_live_database(self):
-        all_live = httpx.get("https://api.opendota.com/api/live").json()
+        all_live = self.db.query_opendota(self.httpx_client, 'live')
         current_api_ids = []
         leagues = {row[0]: row[1] for row in self.db.query_select('SELECT id, "displayName" FROM league_details')}
         for m in all_live:
             league_id = m.get('league_id') 
             if league_id == 0 or not league_id: continue
+            is_finished = m.get('deactivate_time') != 0 
             
             m_id = m['match_id']
             current_api_ids.append(m_id)
-
-            league_name = leagues.get(league_id, 'Unknown League')
+            league_name = leagues.get(league_id, None)
+            if not league_name:
+                league_name = self.get_league_details(league_id)
             start_time = datetime.fromtimestamp(m.get('activate_time'))
             r_id = int(m.get('team_id_radiant')) or 0
             d_id = int(m.get('team_id_dire')) or 0
@@ -41,32 +44,49 @@ class LiveMatchMonitor:
                 start_date_time, radiant_id, dire_id, 
                 radiant_name, dire_name, 
                 radiant_logo, dire_logo, radiant_score, dire_score, 
-                game_time, radiant_lead, last_updated)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                game_time, radiant_lead, is_finished, last_updated)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (match_id) DO UPDATE SET
+                    league_name = EXCLUDED.league_name,
                     radiant_score = EXCLUDED.radiant_score,
                     radiant_logo = EXCLUDED.radiant_logo,
                     dire_logo = EXCLUDED.dire_logo,
                     dire_score = EXCLUDED.dire_score,
                     game_time = EXCLUDED.game_time,
                     radiant_lead = EXCLUDED.radiant_lead,
-                    last_updated = CURRENT_TIMESTAMP;
+                    is_finished = EXCLUDED.is_finished,
+                    last_updated = CURRENT_TIMESTAMP
+                WHERE live_matches.game_time IS DISTINCT FROM EXCLUDED.game_time;
             """
             params = (
                 m_id, league_id, league_name, start_time, 
                 m.get('team_id_radiant'), m.get('team_id_dire'),
                 m.get('team_name_radiant', 'Radiant'), m.get('team_name_dire', 'Dire'),
                 radiant_logo, dire_logo, m.get('radiant_score', 0), 
-                m.get('dire_score', 0), m.get('game_time', 0), m.get('radiant_lead', 0)
+                m.get('dire_score', 0), m.get('game_time', 0), m.get('radiant_lead', 0),
+                is_finished
             )
             self.db.query_execute(query, params=params)
 
         # CLEANUP: Delete matches that haven't been updated in the last 3 minutes
         # This handles games that finished or dropped off the API
-        self.db.query_execute("DELETE FROM live_matches WHERE last_updated < NOW() - INTERVAL '3 minutes'")
+        self.db.query_execute("DELETE FROM live_matches WHERE last_updated < NOW() - INTERVAL '15 minutes'")
+        self.db.query_execute("DELETE FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished")
+
+    def get_league_details(self, league_id):
+        """Returns league name. Fetches from API and saves the details after to the db."""
+        result = self.db.query_opendota(self.httpx_client, f'leagues/{league_id}')
+        if result:
+            try:
+                query = 'INSERT INTO league_details (id, "displayName", tier) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING'
+                self.db.query_execute(query, params=(result['leagueid'], result['name'], str(result['tier']).upper()))
+                return result['name']
+            except Exception as e:
+                logging.error(f'Failed to fetch league details: {e}')
+        return 'Unknown League'
 
     def get_team_logo(self, team_id, team_name):
-        """Returns a URL. Fetches from DB or API if missing."""
+        """Returns a URL. Fetches from DB or API if missing, and saves the data."""
         if not team_id or team_id == 0:
             return '/assets/no_image.svg'
         
@@ -79,7 +99,7 @@ class LiveMatchMonitor:
             return url
         try:
             logging.info(f"Fetching logo for new team: {team_name} ({team_id})")
-            results = httpx.get(f"https://api.opendota.com/api/teams/{team_id}", timeout=10).json()
+            results = self.db.query_opendota(self.httpx_client, f'teams/{team_id}')
             url = results.get("logo_url") or "/assets/no_image.svg"
             
             # Save to DB so we have it for next time
