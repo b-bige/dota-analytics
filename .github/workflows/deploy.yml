@@ -20,8 +20,8 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ vars.SERVER_IP }}       
-          username: ${{ vars.SERVER_USER }} 
+          host: ${{ secrets.SERVER_IP }}       
+          username: ${{ secrets.SERVER_USER }} 
           key: ${{ secrets.SSH_PRIVATE_KEY }} 
           script: |
             cd ${{ vars.PROJECT_PATH }}
