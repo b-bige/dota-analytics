@@ -42,6 +42,9 @@ def render_match_page(match_id):
             mp."heroDamage",
             mp."towerDamage",
             mp."steamAccountId",
+            mp.kills, 
+            mp.deaths, 
+            mp.assists,
             CASE 
                 -- TOP LANE: Radiant Offlane (3,4) or Dire Safelane (1,5)
                 WHEN (mp."isRadiant" = true AND mp.position IN ('POSITION_3', 'POSITION_4')) OR 
@@ -149,38 +152,47 @@ def render_match_page(match_id):
 def create_match_table(players_list, is_radiant:bool):
     header = dmc.TableThead(
         dmc.TableTr([
-            dmc.TableTh("Hero"),
-            dmc.TableTh("Networth", style={"textAlign": "right"}),
-            dmc.TableTh("GPM", style={"textAlign": "right"}),
-            dmc.TableTh("Hero Damage", style={"textAlign": "right"}),
-            dmc.TableTh("Tower Damage", style={"textAlign": "right"}),
+            dmc.TableTh("Hero", style={'width': '30%'}),
+            dmc.TableTh('K / D / A', style={'width': '15%', "textAlign": "right"}),
+            dmc.TableTh("Networth", style={'width': '15%', "textAlign": "right"}),
+            dmc.TableTh("GPM", style={'width': '15%', "textAlign": "right"}),
+            dmc.TableTh("Hero Damage", style={'width': '15%', "textAlign": "right"}),
+            dmc.TableTh("Tower Damage", style={'width': '15%', "textAlign": "right"}),
         ])
     )
     rows = []
     for player in players_list:
-        rows.append(create_match_row(*player[:9])) #TODO: remove is_radiant, position from params, add steam acc id somehow
+        rows.append(create_match_row(*player)) #TODO: remove is_radiant, position from params, add steam acc id somehow
     return dmc.Table(
         children=[header, dmc.TableTbody(rows)],
         verticalSpacing='xs',
         highlightOnHover=True,
         withTableBorder=True,
-        style={"borderTop": f"4px solid {'#40c057' if is_radiant else '#fa5252'}"}
+        style={'tableLayout': 'fixed', 'width': '100%', "borderTop": f"4px solid {'#40c057' if is_radiant else '#fa5252'}"}
     )
 
-def create_match_row(hero_name, hero_display_name, is_radiant, position, networth, gpm, hero_dmg, tower_dmg, steam_acc_id):
+def create_match_row(hero_name, hero_display_name, is_radiant, position, networth, gpm, hero_dmg, tower_dmg, steam_acc_id, kills, deaths, assists, lane_group):
     img_url = f"https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/{hero_name}.png"
+    if not kills:
+        kills = '-'
+    if not deaths:
+        deaths = '-'
+    if not assists:
+        assists = '-'
+    kda = f'{str(kills)} / {str(deaths)} / {str(assists)}'
 
     return dmc.TableTr([
         # Hero Cell: Image + Name
         dmc.TableTd(
             dmc.Group([
                 dmc.Image(src=img_url, w=40, radius="xs"),
-                dmc.Text(hero_display_name, size="sm", fw=600)
+                dmc.Text(hero_display_name, size="sm", fw=600, truncate=True)
             ], gap="sm")
         ),
         # Stats Cells
+        dmc.TableTd(kda, style={'textAlign': 'right'}),
         dmc.TableTd(f"{networth:,}", style={"textAlign": "right"}),
-        dmc.TableTd(gpm, style={"textAlign": "right"}),
+        dmc.TableTd(f'{gpm:,}', style={"textAlign": "right"}),
         dmc.TableTd(f"{hero_dmg:,}", style={"textAlign": "right"}),
         dmc.TableTd(f"{tower_dmg:,}", style={"textAlign": "right"}),
     ])
