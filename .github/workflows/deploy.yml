@@ -34,5 +34,5 @@ jobs:
             sudo systemctl restart dota-dashboard.service
             
             # Check status of both
-            systemctl is-active --quiet dota-monitor.service && echo "Monitor OK"
+            systemctl is-active --quiet dota-live-monitor.service && echo "Monitor OK"
             systemctl is-active --quiet dota-dashboard.service && echo "Dashboard OK"
