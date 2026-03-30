@@ -1,0 +1,38 @@
+name: Deploy
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_IP }}        # Your 100.x.x.x Tailscale IP
+          username: ${{ vars.SERVER_USER }}  # e.g., root
+          key: ${{ secrets.SSH_PRIVATE_KEY }} # The password-less private key
+          script: |
+            cd ${{ vars.PROJECT_PATH }}
+            
+            git pull origin main
+            
+            uv sync
+            
+            sudo systemctl restart dota-monitor.service
+            sudo systemctl restart dota-dashboard.service
+            
+            # Check status of both
+            systemctl is-active --quiet dota-monitor.service && echo "Monitor OK"
+            systemctl is-active --quiet dota-dashboard.service && echo "Dashboard OK"

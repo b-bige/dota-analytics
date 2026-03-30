@@ -9,7 +9,10 @@ def setup_logger(logfile_path):
 
     # 1. CRITICAL: Clear existing handlers so hot-reloads don't stack them
     
-
+    if not os.path.isabs(logfile_path):
+        # Base it on the project root instead of where the script was called
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        logfile_path = os.path.join(base_dir, logfile_path)
     # 1. Setup the Root Logger to catch everything (DEBUG or INFO)
     root_logger = logging.getLogger()
     if root_logger.hasHandlers():

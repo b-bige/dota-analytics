@@ -247,4 +247,5 @@ if __name__ == '__main__':
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
         t = threading.Thread(target=monitor.run_forever, args=(180,), daemon=True)
         t.start()
-    app.run(debug=True)
+    is_production = os.environ.get("IS_PRODUCTION", "False") == "True"
+    app.run(debug=is_production)

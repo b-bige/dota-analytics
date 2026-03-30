@@ -122,3 +122,4 @@ class LiveMatchMonitor:
             time.sleep(interval)
 
 monitor = LiveMatchMonitor(DotaDB())
+monitor.run_forever()
