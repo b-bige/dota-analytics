@@ -47,3 +47,5 @@ JOIN player_match_stats mp2
     AND mp1.is_radiant != mp2.is_radiant
 GROUP BY 1, 2
 HAVING COUNT(*) >= 20;
+
+SELECT * FROM player_match_stats WHERE match_id = 8702535685;

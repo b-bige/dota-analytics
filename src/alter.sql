@@ -1,3 +1,4 @@
+-- Active: 1771411304973@@165.22.73.33@5432@dota@public
 ALTER TABLE match_details 
 ADD COLUMN "startDateTimeHuman" TIMESTAMP;
 
@@ -34,6 +35,10 @@ CREATE TABLE IF NOT EXISTS live_matches (
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE match_players
+ADD COLUMN kills SMALLINT,
+ADD COLUMN deaths SMALLINT,
+ADD COLUMN assists SMALLINT;
 CREATE TABLE team_logos (
     team_id BIGINT,
     logo_url TEXT

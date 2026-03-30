@@ -416,4 +416,6 @@ SELECT * FROM live_matches WHERE is_finished;
 
 SELECT * FROM league_details WHERE id = 18867;
 
+SELECT * FROM match_players WHERE kills IS NULL;
+
 --TODO Separate tables more
