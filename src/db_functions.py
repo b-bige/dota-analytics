@@ -572,7 +572,7 @@ class DotaDB:
                                 ))
                             ])
                         except:
-                            logging.warning('Failed to fetch player performance metrics')
+                            pass
                         try:
                             for source_type, value in stats.get('farmDistributionReport', {}).items():
                                 if source_type != 'buyBackGold':
@@ -658,7 +658,6 @@ class DotaDB:
             self.insert_df_into_table(df, table_name)
             self.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
             self.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
-            df.to_csv(f'{table_name}.csv')
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
     
     def query_opendota(self, client: httpx.Client, endpoint):

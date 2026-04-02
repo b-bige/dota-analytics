@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath('./src/logger'))
 
 from db_functions import DotaDB
 from basic_logger import setup_logger
-setup_logger(logfile_path='historical_rating_db.log')
+setup_logger(logfile_path='logs/historical_rating_db.log')
 
 def main():
     db = DotaDB()

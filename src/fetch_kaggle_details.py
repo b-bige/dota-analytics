@@ -15,12 +15,12 @@ import basic_logger
 basic_logger.setup_logger(logfile_path='logs/fetch_main_league_details.log')
 
 def main():
-    db = DotaDB(schema='kaggle') # The timestamp was found manually, might not be accurate since it is weird
+    db = DotaDB(schema='kaggle')
     query = """
         SELECT match_id 
         FROM main_metadata 
-        WHERE start_date_time < '2021-12-15 14:45:00' 
-        ORDER BY start_date_time ASC LIMIT 10;
+        WHERE start_date_time < '2021-12-15 14:45:00'
+        ORDER BY start_date_time DESC;
     """
     match_ids = [mid[0] for mid in db.query_select(query)]
     db.set_schema(schema='public')
@@ -31,7 +31,7 @@ def main():
     for current_id in [mid[0] for mid in db.query_select(query)]:
         if current_id in match_ids:
             match_ids.remove(current_id)
-    print(match_ids)
+    logging.info(f'Starting collecting historical match data for {len(match_ids)} matches')
     db.query_matches(match_ids)
 
 if __name__ == '__main__':
