@@ -31,8 +31,31 @@ def render_match_page(match_id):
     query = 'SELECT "didRadiantWin", "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
     rad_win, rad_team_id, dire_team_id = db.query_select(query, params=(match_id, ))[0]
     query = 'SELECT name, logo FROM team_details WHERE id = %s'
-    rad_name, rad_logo = db.query_select(query, params=(rad_team_id, ))[0]
-    dire_name, dire_logo = db.query_select(query, params=(dire_team_id, ))[0]
+    rad = db.query_select(query, params=(rad_team_id, ))
+    dire = db.query_select(query, params=(dire_team_id, ))
+    logo_query = 'SELECT logo_url FROM team_logos WHERE team_id = %s'
+    if rad:
+        rad_name = rad[0]
+        rad_logo = rad[1]
+    else:
+        rad_name = f'Radiant ID: {rad_team_id}'
+        rad_logo = ''
+    if not rad_logo:
+        try:
+            rad_logo = db.query_select(logo_query, params=(rad_team_id, ))[0]
+        except:
+            rad_logo = '/assets/no_image.svg'
+    if dire:
+        dire_name = rad[0]
+        dire_logo = rad[1]
+    else:
+        dire_name = f'Dire ID: {dire_team_id}'
+        dire_logo = ''
+    if not dire_logo:
+        try:
+            dire_logo = db.query_select(logo_query, params=(dire_team_id, ))[0]
+        except:
+            dire_logo = '/assets/no_image.svg'
     query = '''
         SELECT 
             hd."shortName", 
@@ -181,6 +204,10 @@ def create_match_row(hero_name, hero_display_name, is_radiant, position, networt
         deaths = '-'
     if not assists:
         assists = '-'
+    if networth:
+        networth_td = dmc.TableTd(f"{networth:,}", style={"textAlign": "right"})
+    else:
+        networth_td = dmc.TableTd('-', style={"textAlign": "right"})
     kda = f'{str(kills)} / {str(deaths)} / {str(assists)}'
 
     return dmc.TableTr([
@@ -193,7 +220,7 @@ def create_match_row(hero_name, hero_display_name, is_radiant, position, networt
         ),
         # Stats Cells
         dmc.TableTd(kda, style={'textAlign': 'right'}),
-        dmc.TableTd(f"{networth:,}", style={"textAlign": "right"}),
+        networth_td,
         dmc.TableTd(f'{gpm:,}', style={"textAlign": "right"}),
         dmc.TableTd(f"{hero_dmg:,}", style={"textAlign": "right"}),
         dmc.TableTd(f"{tower_dmg:,}", style={"textAlign": "right"}),

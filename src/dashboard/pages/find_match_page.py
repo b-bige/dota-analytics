@@ -113,7 +113,7 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
             radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName", 
             md.avg_radiant_rating, md.avg_dire_rating
         ''',
-        order_by='ORDER BY md."startDateTimeHuman" ASC LIMIT %s OFFSET %s',
+        order_by='ORDER BY md."startDateTimeHuman" DESC LIMIT %s OFFSET %s',
         extra_params=[PAGE_SIZE, offset]
     )
 
@@ -177,7 +177,8 @@ def create_match_element(row: dict):
                             # Radiant Side
                             dmc.Stack(align="center", gap=0, children=[
                                 dmc.Image(src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
-                                dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm"),
+                                dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm") if row['radiant_name'] else
+                                dmc.Text(f'Radiant ID: {row['radiant_team_id']}'),
                                 dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed")
                             ]),
                             
@@ -187,7 +188,8 @@ def create_match_element(row: dict):
                             # Dire Side
                             dmc.Stack(align="center", gap=0, children=[
                                 dmc.Image(src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
-                                dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm"),
+                                dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm") if row['dire_name'] else
+                                dmc.Text(f'Dire ID: {row['dire_team_id']}'),
                                 dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed")
                             ])
                         ]
