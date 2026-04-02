@@ -275,6 +275,9 @@ class DotaDB:
                         name
                     }
                 }
+                kills
+                deaths
+                assists
                 isRadiant
                 isVictory
                 variant
@@ -416,6 +419,7 @@ class DotaDB:
                     match_json = self.query_stratz(client, query, variables=variables)['data']['match']
                     if not match_json:
                         logging.warning(f"There was no match data for match {match_id} ({iteration+1}/{len(match_ids)})")
+                        continue
 
                     mid = match_json['id']
                     match_details = {}
@@ -426,126 +430,150 @@ class DotaDB:
 
                     # PickBans (Extend because it's a list)
                     pb = match_json.get('pickBans', [])
-                    for entry in pb: 
-                        entry['match_id'] = mid
-                    storage['pickBans'].extend(pb)
-                    
+                    if pb:
+                        for entry in pb: 
+                            entry['match_id'] = mid
+                        storage['pickBans'].extend(pb)
+                    else:
+                        pass
                     ce = match_json.get('chatEvents', [])
                     if ce:
                         for entry in ce:
                             entry['match_id'] = mid
                         storage['chatEvents'].extend(ce)
                     else:
-                        continue
-
-                    storage['winRates'].extend([
-                        {
-                            'match_id': mid, 
-                            'minute': minute, 
-                            'win_rates': rate
-                        }
-                        for minute, rate in enumerate(match_json['winRates'])
-                    ])
-                    storage['predictedWinRates'].extend([
-                        {
-                            'match_id': mid, 
-                            'minute': minute, 
-                            'predicted_win_rate': rate
-                        }
-                        for minute, rate in enumerate(match_json['predictedWinRates'])
-                    ])
-                    storage['leads'].extend([
-                        {
-                            'match_id': mid,
-                            'minute': minute,
-                            'radiantNetworthLeads': rnwl,
-                            'radiantExperienceLeads': rel,
-                        }
-                        for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetworthLeads'], match_json['radiantExperienceLeads']))
-                    ])
-                    storage['kills'].extend([
-                        {
-                            'match_id': mid,
-                            'minute': minute,
-                            'radiantKills': rk,
-                            'direKills': dk
-                        }
-                        for minute, (rk, dk) in enumerate(zip(match_json['radiantKills'], match_json['direKills']))
-                    ])
-
+                        pass
+                    try:
+                        storage['winRates'].extend([
+                            {
+                                'match_id': mid, 
+                                'minute': minute, 
+                                'win_rates': rate
+                            }
+                            for minute, rate in enumerate(match_json['winRates'])
+                        ])
+                    except:
+                        pass
+                    try:
+                        storage['predictedWinRates'].extend([
+                            {
+                                'match_id': mid, 
+                                'minute': minute, 
+                                'predicted_win_rate': rate
+                            }
+                            for minute, rate in enumerate(match_json['predictedWinRates'])
+                        ])
+                    except:
+                        pass
+                    try:
+                        storage['leads'].extend([
+                            {
+                                'match_id': mid,
+                                'minute': minute,
+                                'radiantNetworthLeads': rnwl,
+                                'radiantExperienceLeads': rel,
+                            }
+                            for minute, (rnwl, rel) in enumerate(zip(match_json['radiantNetworthLeads'], match_json['radiantExperienceLeads']))
+                        ])
+                    except:
+                        pass
+                    try:
+                        storage['kills'].extend([
+                            {
+                                'match_id': mid,
+                                'minute': minute,
+                                'radiantKills': rk,
+                                'direKills': dk
+                            }
+                            for minute, (rk, dk) in enumerate(zip(match_json['radiantKills'], match_json['direKills']))
+                        ])
+                    except:
+                        pass
                     td = match_json.get('towerDeaths', [])
-                    for entry in td:
-                        entry['match_id'] = mid
-                    storage['towerDeaths'].extend(td)
+                    if td:
+                        for entry in td:
+                            entry['match_id'] = mid
+                        storage['towerDeaths'].extend(td)
+                    else:
+                        pass
 
                     snapshots = []
                     tower_updates = []
                     outpost_updates = []
-                    for index, buildings in enumerate(match_json['towerStatus']):
-                        snapshot_id = str(match_json['id']) + f'_{index}'
-                        snapshots.append(
-                        {
-                            'snapshot_id': snapshot_id,
-                            'match_id': match_json['id'],
-                            'order_index': index
-                        })
+                    tower_status = match_json.get('towerStatus', [])
+                    if tower_status:
+                        for index, buildings in enumerate(match_json['towerStatus']):
+                            snapshot_id = str(match_json['id']) + f'_{index}'
+                            snapshots.append(
+                            {
+                                'snapshot_id': snapshot_id,
+                                'match_id': match_json['id'],
+                                'order_index': index
+                            })
 
-                        towers = buildings['towers'] ##TODO: also filter this maybe?
-                        for entry in towers:
-                            entry['snapshot_id'] = snapshot_id
-                        tower_updates.extend(towers)
+                            towers = buildings['towers'] ##TODO: also filter this maybe?
+                            for entry in towers:
+                                entry['snapshot_id'] = snapshot_id
+                            tower_updates.extend(towers)
 
-                        outposts = buildings['outposts'] ##TODO: This is often empty, might want to filter?
-                        for entry in outposts:
-                            entry['snapshot_id'] = snapshot_id
-                        outpost_updates.extend(outposts)
-                    storage['snapshots'].extend(snapshots)
-                    storage['towerStatus'].extend(tower_updates)
-                    storage['outposts'].extend(outpost_updates)
+                            outposts = buildings['outposts'] ##TODO: This is often empty, might want to filter?
+                            for entry in outposts:
+                                entry['snapshot_id'] = snapshot_id
+                            outpost_updates.extend(outposts)
+                        storage['snapshots'].extend(snapshots)
+                        storage['towerStatus'].extend(tower_updates)
+                        storage['outposts'].extend(outpost_updates)
                     for idx, player in enumerate(match_json['players']):
-                        hero_id = player['heroId']
-                        player_row = {'match_id': mid}
-                        stats = player['stats']
-                        for key, value in player.items():
-                            if key == 'stats':
-                                continue
-                            if key == 'steamAccount' and isinstance(value, dict):
-                                for sa_key, sa_value in value.items():
-                                    if sa_key == 'proSteamAccount' and isinstance(sa_value, dict):
-                                        player_row['proSteamAccount_teamId'] = sa_value['teamId']
-                                        player_row['proSteamAccount_name'] = sa_value['name']
-                            else:
-                                player_row[key] = value
-                        storage['players'].append(player_row)
-                        storage['impPerMinute'].extend([
-                            {
-                                'match_id': mid,
-                                'hero_id': hero_id,
-                                'minute': minute,
-                                'imp_per_minute': imp
-                            }
-                            for minute, imp in enumerate(stats['impPerMinute']) 
-                        ])
-                        storage['performanceMetrics'].extend([
-                            {
-                                'match_id': mid,
-                                'hero_id': hero_id,
-                                'minute': minute,
-                                'gold_per_minute': gpm,
-                                'networth_per_minute': nwpm,
-                                'experience_per_minute': exp,
-                                'tower_damage_per_minute': tdpm,
-                                'camp_stack': camp_stack
-                            }
-                            for minute, (gpm, nwpm, exp, tdpm, camp_stack) in enumerate(zip(
-                                stats['goldPerMinute'], stats['networthPerMinute'], 
-                                stats['experiencePerMinute'], stats['towerDamagePerMinute'],
-                                stats['campStack']
-                            ))
-                        ])
-                        if not stats['farmDistributionReport']:
+                        try:
+                            hero_id = player['heroId']
+                            player_row = {'match_id': mid}
+                            stats = player['stats']
+                            for key, value in player.items():
+                                if key == 'stats':
+                                    continue
+                                if key == 'steamAccount' and isinstance(value, dict):
+                                    for sa_key, sa_value in value.items():
+                                        if sa_key == 'proSteamAccount' and isinstance(sa_value, dict):
+                                            player_row['proSteamAccount_teamId'] = sa_value['teamId']
+                                            player_row['proSteamAccount_name'] = sa_value['name']
+                                else:
+                                    player_row[key] = value
+                            storage['players'].append(player_row)
+                        except:
+                            logging.warning('Failed to fetch basic player stats')
+                        try:
+                            storage['impPerMinute'].extend([
+                                {
+                                    'match_id': mid,
+                                    'hero_id': hero_id,
+                                    'minute': minute,
+                                    'imp_per_minute': imp
+                                }
+                                for minute, imp in enumerate(stats['impPerMinute']) 
+                            ])
+                        except:
                             pass
-                        else:
+                        try:
+                            storage['performanceMetrics'].extend([
+                                {
+                                    'match_id': mid,
+                                    'hero_id': hero_id,
+                                    'minute': minute,
+                                    'gold_per_minute': gpm,
+                                    'networth_per_minute': nwpm,
+                                    'experience_per_minute': exp,
+                                    'tower_damage_per_minute': tdpm,
+                                    'camp_stack': camp_stack
+                                }
+                                for minute, (gpm, nwpm, exp, tdpm, camp_stack) in enumerate(zip(
+                                    stats['goldPerMinute'], stats['networthPerMinute'], 
+                                    stats['experiencePerMinute'], stats['towerDamagePerMinute'],
+                                    stats['campStack']
+                                ))
+                            ])
+                        except:
+                            logging.warning('Failed to fetch player performance metrics')
+                        try:
                             for source_type, value in stats.get('farmDistributionReport', {}).items():
                                 if source_type != 'buyBackGold':
                                     items = [value] if isinstance(value, dict) else value
@@ -568,18 +596,23 @@ class DotaDB:
                                         'id': -1,
                                         'gold': value
                                     })
-                        pos_x = [px['positionX'] for px in stats['locationReport']]
-                        pos_y = [py['positionY'] for py in stats['locationReport']]
-                        storage['locationReport'].extend([
-                            {
-                                'match_id': mid,
-                                'hero_id': hero_id,
-                                'minute': minute,
-                                'position_x': pos_x,
-                                'position_y': pos_y
-                            }
-                            for minute, (pos_x, pos_y) in enumerate(zip(pos_x, pos_y))
-                        ])
+                        except:
+                            pass
+                        try:
+                            pos_x = [px['positionX'] for px in stats['locationReport']]
+                            pos_y = [py['positionY'] for py in stats['locationReport']]
+                            storage['locationReport'].extend([
+                                {
+                                    'match_id': mid,
+                                    'hero_id': hero_id,
+                                    'minute': minute,
+                                    'position_x': pos_x,
+                                    'position_y': pos_y
+                                }
+                                for minute, (pos_x, pos_y) in enumerate(zip(pos_x, pos_y))
+                            ])
+                        except:
+                            pass
                         for hero_stat in ['deathEvents', 'itemPurchases', 'courierKills', 'runes', 'wards', 'wardDestruction']:
                             hs = stats[hero_stat]
                             if hs:
@@ -621,11 +654,11 @@ class DotaDB:
             
             if key in renames:
                 df = df.rename(columns=renames[key])
-            
             table_name = table_map[key]
             self.insert_df_into_table(df, table_name)
             self.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
             self.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
+            df.to_csv(f'{table_name}.csv')
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
     
     def query_opendota(self, client: httpx.Client, endpoint):

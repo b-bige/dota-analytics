@@ -19,8 +19,8 @@ def main():
     query = """
         SELECT match_id 
         FROM main_metadata 
-        WHERE start_date_time > '2021-12-15 14:45:00' 
-        ORDER BY start_date_time ASC;
+        WHERE start_date_time < '2021-12-15 14:45:00' 
+        ORDER BY start_date_time ASC LIMIT 10;
     """
     match_ids = [mid[0] for mid in db.query_select(query)]
     db.set_schema(schema='public')
@@ -31,6 +31,7 @@ def main():
     for current_id in [mid[0] for mid in db.query_select(query)]:
         if current_id in match_ids:
             match_ids.remove(current_id)
+    print(match_ids)
     db.query_matches(match_ids)
 
 if __name__ == '__main__':
