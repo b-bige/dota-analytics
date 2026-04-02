@@ -28,7 +28,7 @@ jobs:
             
             git pull origin main
             
-            uv sync
+            /root/.local/bin/uv sync
             sudo systemctl daemon-reload
             sudo systemctl restart dota-live-monitor.service
             sudo systemctl restart dota-dashboard.service
