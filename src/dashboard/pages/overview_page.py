@@ -32,6 +32,7 @@ def layout(**kwargs):
                 stat_card("Total Matches", id="total-matches"),
                 stat_card("Win Rate (Radiant)", id="stat-radiant-win"),
                 stat_card("Avg Game Length", id="stat-avg-duration"),
+                stat_card("Avg Kills", id='stat-avg-kills')
             ]
         ),
         html.Div(
@@ -137,6 +138,7 @@ def show_error(figure):
         Output('total-matches', 'children'),
         Output('stat-radiant-win', 'children'),
         Output('stat-avg-duration', 'children'),
+        Output('stat-avg-kills', 'children'),
         Output('top-heroes', 'figure'),
         Output('duration-distr', 'figure'),
         State('url', 'pathname'),
@@ -168,6 +170,8 @@ def update_overview(pathname, graph_select, *args):
         return 0, 0, 0, None, None, None
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
+    query, params = qb.build(select='AVG(radiant_score + dire_score)')
+    avg_kills = round(db.query_select(query, params=params)[0][0], 0)
     try:
         if filters['heroes']:
             query, params = qb.build('md.id')
@@ -189,7 +193,7 @@ def update_overview(pathname, graph_select, *args):
     except:
         top_heroes_fig = None
     duration_fig = fig_duration_hist(qb.copy())
-    return found_matches, radiant_win, avg_game_length, top_heroes_fig, duration_fig 
+    return found_matches, radiant_win, avg_game_length, avg_kills, top_heroes_fig, duration_fig 
 
 def stat_card(label, id):
     return dmc.Paper(

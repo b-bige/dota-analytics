@@ -421,4 +421,7 @@ SELECT * FROM match_details WHERE id = 6868851786;
 
 SELECT * FROM match_details WHERE id = ANY(ARRAY[2049344492, 2049487960, 2049512022, 2049611198, 2049664745, 2049756270, 2049759347, 2049773936, 2049837414, 2049908794]);
 
+SELECT AVG(radiant_score + dire_score) AS avg_kills
+FROM match_details;
+
 --TODO Separate tables more

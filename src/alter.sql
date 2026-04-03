@@ -44,3 +44,6 @@ CREATE TABLE team_logos (
     logo_url TEXT
 );
 
+ALTER TABLE match_details
+ADD COLUMN radiant_score SMALLINT,
+ADD COLUMN dire_score SMALLINT;

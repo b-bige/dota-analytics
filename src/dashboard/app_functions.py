@@ -343,7 +343,7 @@ def fig_most_present(qb: QueryBuilder, match_count):
 def fig_duration_hist(qb: QueryBuilder):
     query, params = qb.build(select='"durationSeconds" / 60')
     results = pd.Series([r[0] for r in db.query_select(query, params=params)])
-    fig = px.histogram(results, nbins=50, color_discrete_sequence=[COLORS['primary']])
+    fig = px.histogram(results, nbins=30, color_discrete_sequence=[COLORS['primary']])
     fig = apply_fig_theme(fig)
     fig.update_traces(
         patch={
