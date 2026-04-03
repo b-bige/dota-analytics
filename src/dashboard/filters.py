@@ -21,7 +21,7 @@ class Filter(ABC):
 
     @abstractmethod
     def parse_from_url(self, params: dict):
-        return params.get(self.filter_name, [None])[0] 
+        return params.get(self.filter_name, None)
     
     @abstractmethod
     def apply_to_query(self, qb, value, exclude: bool):
@@ -60,9 +60,10 @@ class PatchFilter(Filter):
         return super().parse_from_url(params)
     
     def apply_to_query(self, qb, value, exclude):
-        if value and not exclude:
-            qb.join('p', 'LEFT JOIN patches p ON md."gameVersionId" = p.id')
-            qb.where('p.name = %s', value)
+        if value: 
+            if value[0] and not exclude:
+                qb.join('p', 'LEFT JOIN patches p ON md."gameVersionId" = p.id')
+                qb.where('p.name = ANY(%s)', value)
         return qb
 
     def to_url_params(self, value):
@@ -71,7 +72,10 @@ class PatchFilter(Filter):
     def get_data(self, **filters):
         qb = QueryBuilder()
         qb.join('p', 'INNER JOIN patches p ON md."gameVersionId" = p.id')
-        self.handle_filters(qb, **filters)
+        if 'exclude' in filters.keys():
+            self.handle_filters(qb, **filters)
+        else:
+            self.handle_filters(qb, **filters, exclude='patch')
         query, params = qb.build(
             select='DISTINCT p.name',
             order_by='ORDER BY p.name DESC'
@@ -79,7 +83,7 @@ class PatchFilter(Filter):
         return [result[0] for result in self.db.query_select(query, params=params)]
     
     def render(self, value, data):
-        return dmc.Select(
+        return dmc.MultiSelect(
             id=self.component_id,
             label='Game Version',
             placeholder='Select Game Version',
@@ -96,9 +100,10 @@ class LeagueFilter(Filter):
         return super().parse_from_url(params)
     
     def apply_to_query(self, qb, value, exclude):
-        if value and not exclude:
-            qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
-            qb.where('ld."displayName" = %s', value)
+        if value:
+            if value[0] and not exclude:
+                qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
+                qb.where('ld."displayName" = ANY(%s)', value)
         return qb
     
     def to_url_params(self, value):
@@ -107,7 +112,10 @@ class LeagueFilter(Filter):
     def get_data(self, **filters):
         qb = QueryBuilder()
         qb.join('ld', 'INNER JOIN league_details ld ON md."leagueId" = ld.id')
-        self.handle_filters(qb, **filters)  # will skip 'ld' since already joined
+        if 'exclude' in filters.keys():
+            self.handle_filters(qb, **filters)
+        else:
+            self.handle_filters(qb, **filters, exclude='league')  # will skip 'ld' since already joined
         query, params = qb.build(
             select='DISTINCT ld."displayName"',
             extra_conditions='ld."displayName" NOT LIKE \'?%%\'',
@@ -117,7 +125,7 @@ class LeagueFilter(Filter):
         return leagues
     
     def render(self, value, data):
-        return dmc.Select(
+        return dmc.MultiSelect(
             id='league-filter',
             label='League',
             placeholder='Select League',
