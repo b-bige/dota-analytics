@@ -52,6 +52,7 @@ app.layout = dmc.MantineProvider(
                     children=[
                         dmc.Tabs(
                             id='navigation-tabs',
+                            variant='pills',
                             children=[
                                 dmc.TabsList(
                                     children=[
@@ -99,7 +100,6 @@ app.layout = dmc.MantineProvider(
                                     ]
                                 )
                             ],
-                            variant='pills'
                         ) 
                     ]
                 ),
@@ -187,18 +187,19 @@ def update_filter_state(*args):
 @app.callback(
     Output("url", "search", allow_duplicate=True),
     State('url', 'pathname'),
+    Input('analysis-navigation-tabs', 'value'),
     *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
     prevent_initial_call=True
 )
-def update_url_from_filters_overview(pathname, *args): #TODO: create a helper function from this and the one below
+def update_url_from_filters_overview(pathname, tab_value, *args): #TODO: create a helper function from this and the one below
     if pathname != '/':
         return no_update
-    params = {}
+    params = {'tab': tab_value}
     filters = {}
     for filter_name, component_id in FILTER_IDS.items():
         filter_value = ctx.inputs.get(f'{component_id}.value')
         filters[filter_name] = filter_value
-    params = update_url_from_filters_helper({}, filters)
+    params = update_url_from_filters_helper(params, filters)
     return f"?{urlencode(params, doseq=True)}" if params else ""
 
 @app.callback(

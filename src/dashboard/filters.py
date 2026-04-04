@@ -337,7 +337,7 @@ class DatesFilter(Filter):
         return params
     
     def get_data(self, **filters):
-        return (self.get_date_boundary('MIN', **filters).strftime('%Y-%m-%d'), self.get_date_boundary('MAX', **filters).strftime('%Y-%m-%d'))
+        return (self.get_date_boundary('MIN', **filters), self.get_date_boundary('MAX', **filters))
 
     def get_date_boundary(self, boundary, **kwargs) -> datetime: 
         qb = QueryBuilder()
@@ -345,7 +345,11 @@ class DatesFilter(Filter):
         query, params = qb.build(
             select=f'{boundary}(md."startDateTimeHuman")'
         )
-        return self.db.query_select(query, params=params)[0][0]
+        date_boundary = self.db.query_select(query, params=params)[0][0]
+        try:
+            return date_boundary.strftime('%Y-%m-%d') 
+        except:
+            return None 
     
     def render(self, value, data):
         default_date = value[0] if value[0] else data[0]
@@ -364,7 +368,7 @@ class DatesFilter(Filter):
     
     def get_outputs(self, triggered_component_id, **filters) -> list:
         # dates has 3 outputs: defaultDate, minDate, maxDate
-        min_date, max_date = self.get_date_boundary('MIN', **filters).strftime('%Y-%m-%d'), self.get_date_boundary('MAX', **filters).strftime('%Y-%m-%d')
+        min_date, max_date = self.get_date_boundary('MIN', **filters), self.get_date_boundary('MAX', **filters)
         return [min_date, max_date, min_date]  # defaultDate, minDate, maxDate
 
 FILTER_IDS = {
