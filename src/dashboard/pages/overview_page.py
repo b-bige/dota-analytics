@@ -23,7 +23,7 @@ _duration_fig = fig_duration_hist(QueryBuilder())
 def layout(**kwargs):
     return dmc.Tabs(
         id='analysis-navigation-tabs',
-        value=kwargs['tab'], 
+        value=kwargs.get('tab', 'overview'), 
         variant='pills',
         children=[
             dmc.TabsList(
