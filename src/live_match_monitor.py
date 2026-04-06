@@ -42,8 +42,8 @@ class LiveMatchMonitor:
                 start_date_time, radiant_id, dire_id, 
                 radiant_name, dire_name, 
                 radiant_logo, dire_logo, radiant_score, dire_score, 
-                game_time, radiant_lead, is_finished, last_updated)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                game_time, radiant_lead, is_finished, status, last_updated)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (match_id) DO UPDATE SET
                     league_name = EXCLUDED.league_name,
                     radiant_score = EXCLUDED.radiant_score,
@@ -62,14 +62,35 @@ class LiveMatchMonitor:
                 m.get('team_name_radiant', 'Radiant'), m.get('team_name_dire', 'Dire'),
                 radiant_logo, dire_logo, m.get('radiant_score', 0), 
                 m.get('dire_score', 0), m.get('game_time', 0), m.get('radiant_lead', 0),
-                is_finished
+                is_finished, 'active'
             )
             self.db.query_execute(query, params=params)
 
-        # CLEANUP: Delete matches that haven't been updated in the last 3 minutes
-        # This handles games that finished or dropped off the API
-        self.db.query_execute("DELETE FROM live_matches WHERE last_updated < NOW() - INTERVAL '15 minutes'")
-        self.db.query_execute("DELETE FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished")
+        # CLEANUP: See if match is parsed yet on opendota, if not then request it and wait, 
+        # save the details and drop the matches
+        self.handle_finished()
+
+    def handle_finished(self):
+        """Requests parsing if not yet parsed on idle or deactivated live matches and stores them in the database"""
+        query = """
+        SELECT match_id FROM live_matches WHERE last_updated < NOW() - INTERVAL '15 minutes' AND status = 'active' 
+        UNION
+        SELECT match_id FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished AND status = 'active
+        """
+        active_ids = [r[0] for r in self.db.query_select(query)]  
+        query = "SELECT match_id FROM live_matches WHERE status = 'pending_parse'"
+        pending_ids = [r[0] for r in self.db.query_select(query)]
+        for mid in active_ids:
+            try:
+                self.db.fetch_match_opendota(self.httpx_client, mid)
+                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', (mid, ))
+            except:
+                self.db.request_parse_opendota(self.httpx_client, mid)
+                self.db.query_execute("UPDATE live_matches SET stauts = 'pending_parse' WHERE match_id = %s", (mid, ))
+        for mid in pending_ids:
+            if self.db.is_match_parsed_opendota(self.httpx_client, mid):
+                self.db.fetch_match_opendota(self.httpx_client, mid)
+                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', (mid, ))
 
     def get_league_details(self, league_id):
         """Returns league name. Fetches from API and saves the details after to the db."""
@@ -120,3 +141,4 @@ class LiveMatchMonitor:
             time.sleep(interval)
 
 monitor = LiveMatchMonitor(DotaDB())
+monitor.handle_finished()

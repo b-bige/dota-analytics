@@ -10,4 +10,4 @@ listener = setup_logger(logfile_path='logs/live-match-monitor.log')
 
 #TEST
 if __name__ == "__main__":
-    monitor.run_forever(interval=60)
+    monitor.run_forever(interval=180)

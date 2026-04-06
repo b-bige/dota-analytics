@@ -111,26 +111,60 @@ class DotaDB:
             return
         logging.info(f"Table '{table_name}' created successfully.")
 
-    def insert_df_into_table(self, df, table_name, jsonb_cols=[]):
+    def insert_df_into_table(self, df, table_name, conflict_cols=[], update_cols=None, jsonb_cols=[]):
+        """
+        Inserts a DataFrame using COPY into a temp table, then performs an UPSERT or plain INSERT.
+        - conflict_cols: Column(s) for unique constraint. If empty, a plain INSERT is performed.
+        - update_cols: Columns to update on conflict. Defaults to all non-conflict columns.
+        """
+        if df.empty:
+            return
+
         df = df.convert_dtypes()
         clean_df = df.astype(object).where(pd.notnull(df), None)
+        
         for col in jsonb_cols:
             if col in clean_df.columns:
                 clean_df[col] = clean_df[col].apply(lambda x: Jsonb(x) if x is not None else None)
+
+        col_names = [f'"{c}"' for c in clean_df.columns]
+        col_names_str = ", ".join(col_names)
+        
+        # 1. Logic for Upsert vs Plain Insert
+        upsert_clause = ""
+        if conflict_cols:
+            if update_cols is None:
+                update_cols = [c for c in clean_df.columns if c not in conflict_cols]
+            
+            update_stmt = ", ".join([f'"{c}" = EXCLUDED."{c}"' for c in update_cols])
+            conflict_target = ", ".join([f'"{c}"' for c in conflict_cols])
+            upsert_clause = f"ON CONFLICT ({conflict_target}) DO UPDATE SET {update_stmt}"
+
         try:
             with psycopg.connect(self.conn_str) as conn:
                 with conn.cursor() as cur:
-                    col_names_str = ", ".join([f'"{c}"' for c in clean_df.columns])
-                    copy_query = f'COPY "{table_name}" ({col_names_str}) FROM STDIN'
+                    # 2. Create a temporary staging table
+                    cur.execute(f'CREATE TEMP TABLE staging_table AS SELECT * FROM "{table_name}" LIMIT 0')
+
+                    # 3. Fast COPY into staging
+                    copy_query = f'COPY staging_table ({col_names_str}) FROM STDIN'
                     with cur.copy(copy_query) as copy:
                         for row in clean_df.itertuples(index=False):
                             copy.write_row(row)
 
-                conn.commit()
+                    # 4. Final Transfer (Upsert if conflict_cols present, otherwise simple Insert)
+                    final_query = f"""
+                        INSERT INTO "{table_name}" ({col_names_str})
+                        SELECT {col_names_str} FROM staging_table
+                        {upsert_clause}
+                    """
+                    cur.execute(final_query)
+
+            mode = "Upserted" if conflict_cols else "Inserted"
+            logging.info(f"{mode} {len(clean_df)} rows into '{table_name}' successfully.")
+            
         except Exception as e:
-            logging.error(f"Error inserting data into table '{table_name}': {e}")
-            return
-        logging.info(f"Inserted {len(clean_df)} rows into table '{table_name}' successfully.")
+            logging.error(f"Error processing data for table '{table_name}': {e}")
 
     def query_execute(self, query, identifiers=None, params=None):
         with psycopg.connect(self.conn_str) as conn:
@@ -669,7 +703,179 @@ class DotaDB:
         except:
             logging.error(f"Failed GET request at {self.opendota_url}/{endpoint}")
             return []
+        
+    def request_parse_opendota(self, client: httpx.Client, match_id):
+        """Request parsing match_details from opendota. Returns job id"""
+        try:
+            response = client.post(f'{self.opendota_url}/request/{match_id}').json()
+            return response['job']['jobId']
+        except Exception as e:
+            logging.error(f'Failed to request match parsing at opendota: {e}')
 
+    def is_match_parsed_opendota(self, client: httpx.Client, job_id):
+        response = client.get(f'{self.opendota_url}/request/{job_id}')
+        try:
+            response.raise_for_status()
+            result = response.json()
+            if not result:
+                return True
+            else: 
+                return False
+        except Exception as e:
+            logging.error(f'Error with response: {e}')
+            return False
+    
+    def fetch_match_opendota(self, client: httpx.Client, match_id):
+        try:
+            response = client.get(f'{self.opendota_url}/matches/{match_id}')
+            response.raise_for_status()
+            result = response.json()
+            rune_map = {
+                "0": "DOUBLE_DAMAGE",
+                "1": "HASTE",
+                "2": "ILLUSION",
+                "3": "INVISIBILITY",
+                "4": "REGEN",
+                "5": "BOUNTY",
+                "6": "ARCANE",
+                "7": "WATER",
+                "8": "WISDOM",
+                "9": "SHIELD"
+            }
+            query = 'SELECT * FROM hero_details'
+            heroes = self.query_select_to_df(query, table='hero_details')
+            query = 'SELECT * FROM item_details_opendota' #These 3 could be optimized by moving to class properties or something else
+            items = self.query_select_to_df(query, table='item_details_opendota')  
+            query = 'SELECT * FROM npcs'
+            npcs = self.query_select_to_df(query, table='npcs')
+            mid = result['match_id']
+            mid = result['match_id']
+            table_names = [
+                'match_details', 'match_death_events', 'match_pick_bans', 'match_tower_deaths', 
+                'match_players', 'match_purchases', 'match_runes', 'match_wards'
+            ]
+            storage = {table: [] for table in table_names}
+            for mpb in result['picks_bans']:
+                storage['match_pick_bans'].append(
+                    {
+                        'match_id': mid,
+                        'isPick': mpb['is_pick'],
+                        'heroId': mpb['hero_id'],
+                        'order': mpb['order'],
+                        'isRadiant': mpb['team'] == 0
+                    }
+                )
+            storage['match_details'] = {
+                'id': mid, 'tournamentId': result.get('tournament_id'), 'tournamentRound': result.get('tournament_round'),
+                'leagueId': result['leagueid'], 'radiantTeamId': result['radiant_team_id'], 'direTeamId': result['dire_team_id'],
+                'seriesId': result['series_id'], 'clusterId': result['cluster'], 'didRadiantWin': result['radiant_win'],
+                'startDateTime': result['start_time'], 'endDateTime': result['start_time'] + result['duration'], 'durationSeconds': result['duration'],
+                'firstBloodTime': result['first_blood_time'], 'towerStatusRadiant': result['tower_status_radiant'], 'towerStatusDire': result['tower_status_dire'],
+                'barracksStatusRadiant': result['barracks_status_radiant'], 'barracksStatusDire': result['barracks_status_dire'], 'rank': result.get('rank_tier'),
+                'actualRank': result.get('rank_tier_actual'), 'averageRank': result.get('average_rank'), 'averageImp': result.get('average_imp'),
+                'radiant_score': result['radiant_score'], 'dire_score': result['dire_score']
+            }
+            for obj in result['objectives']:
+                if obj['type'] == 'building_kill':
+                    try:
+                        attacker = heroes[heroes['name'] == obj['unit']].get('id').iloc[0]
+                    except:
+                        attacker = 'non-hero'
+                    storage['match_tower_deaths'].append(
+                        {
+                            'match_id': mid,
+                            'time': obj['time'],
+                            'npcId': npcs[npcs['name'] == obj['key']].get('id').iloc[0],
+                            'isRadiant': 'goodguys' in obj['key'],
+                            'attacker': attacker
+                        }
+                    )
+            for p in result['players']:
+                hero_id = p['hero_id']
+                for kill in p['kills_log']:
+                    storage['match_death_events'].append(
+                        {
+                            'match_id': mid,
+                            'hero_id': int(heroes[heroes['name'] == kill['key']].get('id').iloc[0]),
+                            'time': kill['time'],
+                            'attacker': hero_id
+                        }
+                    )
+                is_radiant = p['team_number'] == 0
+                if (is_radiant and p['team_number'] == 0) or (not is_radiant and p['team_number'] == 1):
+                    is_victory = True
+                else:
+                    is_victory = False           
+                storage['match_players'].append(
+                    {
+                        'match_id': mid,
+                        'heroId': p['hero_id'],
+                        'isRadiant': is_radiant,
+                        'isVictory': is_victory,
+                        'variant': p['hero_variant'],
+                        'networth': p['net_worth'],
+                        'goldPerMinute': p['gold_per_min'],
+                        'goldSpent': p['gold_spent'],
+                        'towerDamage': p['tower_damage'],
+                        'heroDamage': p['hero_damage'],
+                        'steamAccountId': p['account_id'],
+                        'partyId': p['party_id'],
+                        'name': p['name'],
+                        'kills': p['kills'],
+                        'deaths': p['deaths'],
+                        'assists': p['assists']
+                    }
+                )
+                for pur in p['purchase_log']:
+                    storage['match_purchases'].append(
+                        {
+                            'match_id': mid,
+                            'hero_id': hero_id,
+                            'time': pur['time'],
+                            'itemId': items[items['shortName'] == pur['key']].get('id').iloc[0]
+                        }
+                    )
+                for rune in p['runes_log']:
+                    storage['match_runes'].append(
+                        {
+                            'match_id': mid,
+                            'hero_id': p['hero_id'],
+                            'time': rune['time'],
+                            'rune': rune_map[rune['key']]
+                        }
+                    )
+                for ward in p['obs_log']:
+                    storage['match_wards'].append(
+                        {
+                            'match_id': mid,
+                            'hero_id': p['hero_id'],
+                            'time': ward['time'],
+                            'type': 0,
+                            'positionX': ward['x'],
+                            'positionY': ward['y']
+                        }
+                    )
+                for ward in p['sen_log']:
+                    storage['match_wards'].append(
+                        {
+                            'match_id': mid,
+                            'hero_id': p['hero_id'],
+                            'time': ward['time'],
+                            'type': 1,
+                            'positionX': ward['x'],
+                            'positionY': ward['y']
+                        }
+                    )  
+            for table, data in storage.items():
+                if table == 'match_details':
+                    self.insert_df_into_table(pd.DataFrame(data, index=[0]), table_name=table)
+                else:
+                    self.insert_df_into_table(pd.DataFrame(data), table_name=table)
+            logging.info(f"Successfully fetched and stored data for match ID {match_id}")
+
+        except Exception as e:
+            logging.error(f'Failed to parse match at opendota: {e}')
+            raise
 
     def get_pg_type(self, pandas_type):
         if pd.api.types.is_integer_dtype(pandas_type):
@@ -683,4 +889,6 @@ class DotaDB:
         else:
             return "TEXT"
         
-    
+db = DotaDB()
+with httpx.Client() as client:
+    db.fetch_match_opendota(client, 8760126026)

@@ -424,4 +424,12 @@ SELECT * FROM match_details WHERE id = ANY(ARRAY[2049344492, 2049487960, 2049512
 SELECT AVG(radiant_score + dire_score) AS avg_kills
 FROM match_details;
 
+SELECT COUNT(DISTINCT match_id) FROM match_inventory_reports;
+
+SELECT DISTINCT rune FROM match_runes;
+
+SELECT COUNT(*) FROM match_players WHERE id IS NULL;
+
+ALTER TABLE match_players ADD COLUMN id BIGSERIAL PRIMARY KEY;
+
 --TODO Separate tables more

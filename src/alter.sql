@@ -47,3 +47,8 @@ CREATE TABLE team_logos (
 ALTER TABLE match_details
 ADD COLUMN radiant_score SMALLINT,
 ADD COLUMN dire_score SMALLINT;
+
+ALTER TABLE match_wards ALTER COLUMN "positionX" TYPE NUMERIC;
+ALTER TABLE match_wards ALTER COLUMN "positionY" TYPE NUMERIC;
+
+CREATE TABLE wards_backup AS SELECT * FROM match_wards;
