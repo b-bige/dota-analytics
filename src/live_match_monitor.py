@@ -75,7 +75,7 @@ class LiveMatchMonitor:
         query = """
         SELECT match_id FROM live_matches WHERE last_updated < NOW() - INTERVAL '15 minutes' AND status = 'active' 
         UNION
-        SELECT match_id FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished AND status = 'active
+        SELECT match_id FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished AND status = 'active'
         """
         active_ids = [r[0] for r in self.db.query_select(query)]  
         query = "SELECT match_id FROM live_matches WHERE status = 'pending_parse'"
@@ -141,4 +141,3 @@ class LiveMatchMonitor:
             time.sleep(interval)
 
 monitor = LiveMatchMonitor(DotaDB())
-monitor.handle_finished()
