@@ -71,7 +71,9 @@ class LiveMatchMonitor:
         self.handle_finished()
 
     def handle_finished(self):
-        """Requests parsing if not yet parsed on idle or deactivated live matches and stores them in the database"""
+        """Requests parsing if not yet parsed on idle or deactivated live matches and stores them in the database,
+            and deletes them from live_matches when saved.
+        """
         query = """
         SELECT match_id FROM live_matches WHERE last_updated < NOW() - INTERVAL '15 minutes' AND status = 'active' 
         UNION
@@ -84,6 +86,7 @@ class LiveMatchMonitor:
             try:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
                 self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', (mid, ))
+                logging.info(f'Saved finished match ID {mid} into database')
             except:
                 self.db.request_parse_opendota(self.httpx_client, mid)
                 self.db.query_execute("UPDATE live_matches SET stauts = 'pending_parse' WHERE match_id = %s", (mid, ))
@@ -91,6 +94,7 @@ class LiveMatchMonitor:
             if self.db.is_match_parsed_opendota(self.httpx_client, mid):
                 self.db.fetch_match_opendota(self.httpx_client, mid)
                 self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', (mid, ))
+                logging.info(f'Saved finished match ID {mid} into database')
 
     def get_league_details(self, league_id):
         """Returns league name. Fetches from API and saves the details after to the db."""
