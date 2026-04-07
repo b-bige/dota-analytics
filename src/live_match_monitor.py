@@ -85,15 +85,15 @@ class LiveMatchMonitor:
         for mid in active_ids:
             try:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
-                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', (mid, ))
+                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
             except:
                 self.db.request_parse_opendota(self.httpx_client, mid)
-                self.db.query_execute("UPDATE live_matches SET stauts = 'pending_parse' WHERE match_id = %s", (mid, ))
+                self.db.query_execute("UPDATE live_matches SET stauts = 'pending_parse' WHERE match_id = %s", params=(mid, ))
         for mid in pending_ids:
             if self.db.is_match_parsed_opendota(self.httpx_client, mid):
                 self.db.fetch_match_opendota(self.httpx_client, mid)
-                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', (mid, ))
+                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
 
     def get_league_details(self, league_id):
@@ -106,6 +106,7 @@ class LiveMatchMonitor:
                 return result['name']
             except Exception as e:
                 logging.error(f'Failed to fetch league details: {e}')
+                raise
         return 'Unknown League'
 
     def get_team_logo(self, team_id, team_name):
@@ -145,3 +146,6 @@ class LiveMatchMonitor:
             time.sleep(interval)
 
 monitor = LiveMatchMonitor(DotaDB())
+if __name__ == '__main__':
+    with httpx.Client() as client:
+        monitor.db.fetch_match_opendota(client, match_id=8760986413)

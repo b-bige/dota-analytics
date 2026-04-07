@@ -43,7 +43,7 @@ class DotaDB:
         dbname = os.getenv("DB_NAME")
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
 
-    def query_select(self, query, identifiers=None, params=None):
+    def query_select(self, query, params=None, identifiers=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -53,7 +53,7 @@ class DotaDB:
                 cur.execute(final_query, params)
                 return cur.fetchall() if cur.description else None
             
-    def query_select_to_df(self, query, columns=None, identifiers=None, params=None, table=None):
+    def query_select_to_df(self, query, columns=None, params=None, identifiers=None, table=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -166,7 +166,7 @@ class DotaDB:
         except Exception as e:
             logging.error(f"Error processing data for table '{table_name}': {e}")
 
-    def query_execute(self, query, identifiers=None, params=None):
+    def query_execute(self, query, params=None, identifiers=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -177,7 +177,7 @@ class DotaDB:
                 conn.commit()
                 return None
             
-    def query_executemany(self, query, identifiers=None, params=None):
+    def query_executemany(self, query, params=None, identifiers=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -755,7 +755,8 @@ class DotaDB:
                 'match_players', 'match_purchases', 'match_runes', 'match_wards'
             ]
             storage = {table: [] for table in table_names}
-            for mpb in result['picks_bans']:
+            picks_bans = result.get('picks_bans', [])
+            for mpb in picks_bans:
                 storage['match_pick_bans'].append(
                     {
                         'match_id': mid,
@@ -793,10 +794,14 @@ class DotaDB:
             for p in result['players']:
                 hero_id = p['hero_id']
                 for kill in p['kills_log']:
+                    try: 
+                        killed_id = int(heroes[heroes['name'] == kill['key']].get('id').iloc[0])
+                    except:
+                        killed_id = -1
                     storage['match_death_events'].append(
                         {
                             'match_id': mid,
-                            'hero_id': int(heroes[heroes['name'] == kill['key']].get('id').iloc[0]),
+                            'hero_id': killed_id,
                             'time': kill['time'],
                             'attacker': hero_id
                         }
@@ -889,6 +894,7 @@ class DotaDB:
         else:
             return "TEXT"
         
-db = DotaDB()
-with httpx.Client() as client:
-    db.fetch_match_opendota(client, 8760126026)
+if __name__ == '__main__':
+    db = DotaDB()
+    with httpx.Client() as client:
+        db.fetch_match_opendota(client, 8760126026)
