@@ -60,4 +60,4 @@ CREATE TABLE archive_live_match_ids (
 ALTER TABLE live_matches
 ALTER COLUMN start_date_time
 TYPE TIMESTAMPTZ
-USING start_date_time AT TIME ZONE 'GMT';
+USING start_date_time AT TIME ZONE 'UTC';

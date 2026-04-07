@@ -3,6 +3,7 @@ from dash import html, dcc, callback, Input, Output, State, no_update, ctx
 import dash_mantine_components as dmc
 import plotly.express as px
 import plotly.graph_objects as go
+from zoneinfo import ZoneInfo
 
 import time
 import logging
@@ -65,6 +66,7 @@ def create_live_match_card(row):
     game_time = convert_duration_format(row['game_time'])
     league = row['league_name']
     is_unknown_League = (league == 'Unknown League')
+    start_time = row['start_date'].astimezone(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')
     return dmc.Paper(
         withBorder=True,
         shadow='sm',
@@ -134,7 +136,7 @@ def create_live_match_card(row):
             dmc.Group(
                 justify="space-between",
                 children=[
-                    dmc.Text(f"📅 {row['start_date']}", size="xs", c="dimmed"),
+                    dmc.Text(f"📅 {start_time}", size="xs", c="dimmed"),
                     dmc.Text(f"Current⏱️ {game_time}", size="xs", c="dimmed"),
                     dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
                 ]

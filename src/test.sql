@@ -438,6 +438,8 @@ FROM match_details md
 JOIN match_players mp ON mp.match_id = md.id
 JOIN hero_details hd ON mp."heroId" = hd.id;
 
+SHOW TIMEZONE;
 
+SELECT * FROM live_matches;
 
 --TODO Separate tables more
