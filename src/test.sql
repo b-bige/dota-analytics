@@ -432,4 +432,12 @@ SELECT COUNT(*) FROM match_players WHERE id IS NULL;
 
 ALTER TABLE match_players ADD COLUMN id BIGSERIAL PRIMARY KEY;
 
+SELECT 
+    hd.id AS hero_id, hd."displayName" AS hero_name, mp."goldPerMinute" AS gpm
+FROM match_details md
+JOIN match_players mp ON mp.match_id = md.id
+JOIN hero_details hd ON mp."heroId" = hd.id;
+
+
+
 --TODO Separate tables more

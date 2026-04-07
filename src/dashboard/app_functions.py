@@ -365,6 +365,23 @@ def fig_duration_hist(qb: QueryBuilder):
     )
     return fig
 
+def fig_gpm_volatility(qb: QueryBuilder, hero_list: list):
+    qb.join('mp', 'JOIN match_players mp ON mp.match_id = md.id')
+    qb.join('hd', 'JOIN hero_details hd ON mp."heroId" = hd.id')
+    qb.where('hd."displayName" = ANY(%s)', hero_list)
+    query, params = qb.build(select='hd.id as hero_id, hd."displayName" as hero_name, mp."goldPerMinute" as gpm')
+    results = db.query_select(query, params=params)
+    df = pd.DataFrame(results, columns=['hero_id', 'hero_name', 'gpm'])
+    fig = px.box(df, x='hero_name', y='gpm')
+    fig = apply_fig_theme(fig)
+    fig.update_layout(
+        title="Gold Per Minute Volatility",
+        autosize=True,
+        xaxis=dict(title_text='Hero', showgrid=False),
+        yaxis=dict(showgrid=False)
+    )
+    return fig
+
 #### Update helpers
 def update_url_from_filters_helper(params, filters):
     for filter_name, value in filters.items():
@@ -374,3 +391,9 @@ def update_url_from_filters_helper(params, filters):
 def get_db_max_duration(): #TODO: Update this so it updates, or maybe move this to a materialized view and trigger updates
     query = 'SELECT MAX("durationSeconds") / 60 FROM match_details'
     return db.query_select(query)[0][0]
+
+def get_dynamic_val(inputs, index_name, default):
+    for item in inputs:
+        if item['id']['index'] == index_name:
+            return item['value'] if item['value'] is not None else default
+    return default

@@ -201,7 +201,7 @@ class HeroesFilter(Filter):
         self.heroes = self.get_heroes()
 
     def get_heroes(self):
-        query = 'SELECT "displayName" FROM hero_details'
+        query = 'SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC'
         return [r[0] for r in self.db.query_select(query)]
     
     def parse_from_url(self, params):

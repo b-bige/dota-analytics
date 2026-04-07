@@ -22,12 +22,15 @@ class LiveMatchMonitor:
         all_live = self.db.query_opendota(self.httpx_client, 'live')
         current_api_ids = []
         leagues = {row[0]: row[1] for row in self.db.query_select('SELECT id, "displayName" FROM league_details')}
+        archived_ids = [r[0] for r in self.db.query_select('SELECT match_id FROM archive_live_match_ids')]
         for m in all_live:
             league_id = m.get('league_id') 
             if league_id == 0 or not league_id: continue
             is_finished = m.get('deactivate_time') != 0 
             
             m_id = m['match_id']
+            if m_id in archived_ids:
+                continue
             current_api_ids.append(m_id)
             league_name = leagues.get(league_id, None)
             if not league_name:
@@ -85,6 +88,7 @@ class LiveMatchMonitor:
         for mid in active_ids:
             try:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
+                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
                 self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
             except:
@@ -93,6 +97,7 @@ class LiveMatchMonitor:
         for mid in pending_ids:
             if self.db.is_match_parsed_opendota(self.httpx_client, mid):
                 self.db.fetch_match_opendota(self.httpx_client, mid)
+                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
                 self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
 

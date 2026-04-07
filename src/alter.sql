@@ -52,3 +52,12 @@ ALTER TABLE match_wards ALTER COLUMN "positionX" TYPE NUMERIC;
 ALTER TABLE match_wards ALTER COLUMN "positionY" TYPE NUMERIC;
 
 CREATE TABLE wards_backup AS SELECT * FROM match_wards;
+
+CREATE TABLE archive_live_match_ids (
+    match_id BIGINT
+);
+
+ALTER TABLE live_matches
+ALTER COLUMN start_date_time
+TYPE TIMESTAMPTZ
+USING start_date_time AT TIME ZONE 'GMT';
