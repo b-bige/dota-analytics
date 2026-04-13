@@ -33,10 +33,14 @@ def render_match_page(match_id):
     rad = db.select(query, params=(rad_team_id, ))
     dire = db.select(query, params=(dire_team_id, ))
     logo_query = 'SELECT logo_url FROM team_logos WHERE team_id = %s'
-    if rad:
-        rad_name = rad[0]
-        rad_logo = rad[1]
-    else:
+    try:
+        if rad:
+            rad_name = rad[0]
+            rad_logo = rad[1]
+        else:
+            rad_name = f'Radiant ID: {rad_team_id}'
+            rad_logo = ''
+    except:
         rad_name = f'Radiant ID: {rad_team_id}'
         rad_logo = ''
     if not rad_logo:
@@ -44,10 +48,14 @@ def render_match_page(match_id):
             rad_logo = db.select(logo_query, params=(rad_team_id, ))[0]
         except:
             rad_logo = '/assets/no_image.svg'
-    if dire:
-        dire_name = rad[0]
-        dire_logo = rad[1]
-    else:
+    try:
+        if dire:
+            dire_name = dire[0]
+            dire_logo = dire[1]
+        else:
+            dire_name = f'Dire ID: {dire_team_id}'
+            dire_logo = ''
+    except:
         dire_name = f'Dire ID: {dire_team_id}'
         dire_logo = ''
     if not dire_logo:

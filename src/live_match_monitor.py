@@ -88,6 +88,8 @@ class LiveMatchMonitor:
         for mid in active_ids:
             try:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
+                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
+                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
                 self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
                 self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
@@ -97,6 +99,8 @@ class LiveMatchMonitor:
         for mid in pending_ids:
             if self.db.is_match_parsed_opendota(self.httpx_client, mid):
                 self.db.fetch_match_opendota(self.httpx_client, mid)
+                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
+                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
                 self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
                 self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
@@ -131,7 +135,6 @@ class LiveMatchMonitor:
             results = self.db.fetch_opendota(self.httpx_client, f'teams/{team_id}')
             url = results.get("logo_url") or "/assets/no_image.svg"
             
-            # Save to DB so we have it for next time
             self.db.query_execute(
                 "INSERT INTO team_logos (team_id, logo_url) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                 params=(team_id, url)
@@ -153,5 +156,3 @@ class LiveMatchMonitor:
 monitor = LiveMatchMonitor(DotaDB())
 if __name__ == '__main__':
     monitor.run_forever(interval=180)
-    # with httpx.Client() as client:
-    #     monitor.db.fetch_match_opendota(client, match_id=8760986413)

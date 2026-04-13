@@ -17,6 +17,8 @@ def main():
             is_saved = db.try_fetch_stratz_match(mid)
             if is_saved:
                 db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
+                db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
+                db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
                 logging.info(f'Successfully saved data for archived live match ID {mid}')
 
 if __name__ == '__main__':
