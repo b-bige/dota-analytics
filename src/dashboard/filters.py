@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from db_functions import DotaDB
+from dota_db import DotaDB
 from datetime import datetime, timedelta
 from query_builder import QueryBuilder
 import dash_mantine_components as dmc
@@ -80,7 +80,7 @@ class PatchFilter(Filter):
             select='DISTINCT p.name',
             order_by='ORDER BY p.name DESC'
         )
-        return [result[0] for result in self.db.query_select(query, params=params)]
+        return [result[0] for result in self.db.select(query, params=params)]
     
     def render(self, value, data):
         return dmc.MultiSelect(
@@ -121,7 +121,7 @@ class LeagueFilter(Filter):
             extra_conditions='ld."displayName" NOT LIKE \'?%%\'',
             order_by='ORDER BY ld."displayName" ASC'
         )
-        leagues = [result[0] for result in self.db.query_select(query, params=params)]
+        leagues = [result[0] for result in self.db.select(query, params=params)]
         return leagues
     
     def render(self, value, data):
@@ -173,7 +173,7 @@ class TeamsFilter(Filter):
             {q2}
             ORDER BY name ASC
         '''
-        return [r[0] for r in self.db.query_select(query, params=params1 + params2)]
+        return [r[0] for r in self.db.select(query, params=params1 + params2)]
     
     def render(self, value, data):
         teams_placeholder = 'Select 2 To See Head-to-Head' if len(data) > 0 else 'No Pro Teams Found'
@@ -202,7 +202,7 @@ class HeroesFilter(Filter):
 
     def get_heroes(self):
         query = 'SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC'
-        return [r[0] for r in self.db.query_select(query)]
+        return [r[0] for r in self.db.select(query)]
     
     def parse_from_url(self, params):
         return params.get(self.filter_name, None)
@@ -239,7 +239,7 @@ class DurationsFilter(Filter):
 
     def get_db_max_duration(self):
         query = 'SELECT MAX("durationSeconds") / 60 FROM match_details'
-        return self.db.query_select(query)[0][0]
+        return self.db.select(query)[0][0]
 
     def parse_from_url(self, params):
         start_duration = params.get('startDuration', [0])[0]
@@ -345,7 +345,7 @@ class DatesFilter(Filter):
         query, params = qb.build(
             select=f'{boundary}(md."startDateTimeHuman")'
         )
-        date_boundary = self.db.query_select(query, params=params)[0][0]
+        date_boundary = self.db.select(query, params=params)[0][0]
         try:
             return date_boundary.strftime('%Y-%m-%d') 
         except:

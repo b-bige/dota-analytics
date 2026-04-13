@@ -6,7 +6,7 @@ import os, sys, logging
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from db_functions import DotaDB
+from dota_db import DotaDB
 from basic_logger import setup_logger
 setup_logger(logfile_path='logs/historical_rating_db.log')
 
@@ -24,7 +24,6 @@ def main():
     file = f'data/{choices[int(selected)]}'
     logging.info(f'Saving ratings from file: {file}')
     df = pd.read_csv(file).sort_values('match_id')
-    df = df[df['match_id'] > 6200000000]
 
     # compute avg ratings per match per side in one go
     avg_ratings = df.groupby(['match_id', 'is_radiant'])['ordinal'].mean().unstack('is_radiant')

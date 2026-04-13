@@ -6,7 +6,7 @@ import os, sys
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from db_functions import DotaDB
+from dota_db import DotaDB
 
 def main():
     db = DotaDB()

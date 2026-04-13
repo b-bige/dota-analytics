@@ -16,7 +16,7 @@ from dashboard.filters import *
 
 dash.register_page(__name__, path='')
 
-_all_heroes = [r[0] for r in db.query_select('SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC')]
+_all_heroes = [r[0] for r in db.select('SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC')]
 
 def layout(**kwargs):
     return dmc.Tabs(
@@ -60,13 +60,14 @@ def render_tab_content(search, dynamic_values, *args):
     dynamic_inputs = ctx.inputs_list[1] 
     graph_select = get_dynamic_val(ctx.inputs_list[1], 'top-heroes-select', 'win')
     gpm_heroes_list = get_dynamic_val(ctx.inputs_list[1], 'gpm-heroes-select', [])
+    position_select = get_dynamic_val(ctx.inputs_list[1], 'position-select', 'Carry')
 
     if active_tab == 'overview':
         return render_overview_layout(qb, filters, graph_select, has_filters), active_tab
     if active_tab == 'meta': 
         return render_meta_layout(qb, filters, has_filters), active_tab
     if active_tab == 'economy':
-        return render_economy_layout(qb, filters, has_filters, gpm_heroes_list), active_tab
+        return render_economy_layout(qb, filters, has_filters, gpm_heroes_list, position_select), active_tab
     
 def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_filters: bool):
     query, params = qb.build(
@@ -76,7 +77,7 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
         AVG("durationSeconds")
         '''
     )
-    results = db.query_select(query, params=params)[0]
+    results = db.select(query, params=params)[0]
     found_matches = results[0]
     if found_matches == 0:
         return html.Div(
@@ -101,14 +102,14 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
     query, params = qb.build(select='AVG(radiant_score + dire_score)')
-    avg_kills = round(db.query_select(query, params=params)[0][0], 0)
+    avg_kills = round(db.select(query, params=params)[0][0], 0)
     if not graph_select:
         graph_select = 'win'
     try:
         duration_fig = fig_duration_hist(qb.copy())
         if filters['heroes']:
             query, params = qb.build('md.id')
-            ids = [r[0] for r in db.query_select(query, params=params)]
+            ids = [r[0] for r in db.select(query, params=params)]
             qb_heroes = QueryBuilder()
             qb_heroes.where('md.id = ANY(%s)', ids)
             qb_heroes = Filter.handle_filters(qb_heroes, **filters, exclude='heroes')
@@ -175,7 +176,7 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
             ]
         ),
         dmc.SimpleGrid(
-            cols={"base": 1, "lg": 2}, # 1 column on small screens, 2 on large
+            cols={"base": 1, "lg": 2},
             spacing="xl",
             mt="md",
             children=[
@@ -188,7 +189,7 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
                 dcc.Graph(
                     id='top-heroes',
                     figure=top_heroes_fig,
-                    responsive=True, # Crucial: tells Plotly to listen for resize events
+                    responsive=True,
                     style={"width": "100%"}
                 ),
                 dcc.Graph(
@@ -204,7 +205,7 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
 def render_meta_layout(qb: QueryBuilder, filters: dict, has_filters: bool):
     return html.Div('Under development')
     
-def render_economy_layout(qb: QueryBuilder, filters: dict, has_filters: bool, gpm_heroes_list):
+def render_economy_layout(qb: QueryBuilder, filters: dict, has_filters: bool, gpm_heroes_list, position):
     if not gpm_heroes_list:
         gpm_heroes_list = None
     return [
@@ -218,9 +219,29 @@ def render_economy_layout(qb: QueryBuilder, filters: dict, has_filters: bool, gp
                             label='Heroes',
                             placeholder='Select Heroes for Analysis',
                             data=_all_heroes,
-                            value=gpm_heroes_list,
+                            value=gpm_heroes_list if gpm_heroes_list else ['Abaddon', 'Axe', 'Bane'],
                             maxValues=10,
                             persistence=True,     
+                            persistence_type='session',
+                            w='100%',
+                            style={'flex': '1'}
+                        )
+                    ]
+                ),
+                dmc.GridCol(
+                    span=3,
+                    children=[]
+                ),
+                dmc.GridCol(
+                    span=3,
+                    children=[
+                        dmc.Select(
+                            id={'type': 'dynamic-select', 'index': 'position-select'},
+                            label='Role',
+                            placeholder='Select Role for Analysis',
+                            data=['Carry', 'Midlaner', 'Offlaner', 'Roamer/Soft Support', 'Hard Support'],
+                            value='Carry',
+                            persistence=True,
                             persistence_type='session',
                             w='100%',
                             style={'flex': '1'}
@@ -230,15 +251,21 @@ def render_economy_layout(qb: QueryBuilder, filters: dict, has_filters: bool, gp
             ]
         ),
         dmc.SimpleGrid(
-            cols={"base": 1, "lg": 2}, # 1 column on small screens, 2 on large
+            cols={"base": 1, "lg": 2},
             spacing="xl",
             mt="md",
             children=[
                 dcc.Graph(
                     id='gpm-volatility',
                     figure=fig_gpm_volatility(qb.copy(), gpm_heroes_list),
-                    responsive=True, # Crucial: tells Plotly to listen for resize events
+                    responsive=True, 
                     style={"width": "100%"}
+                ),
+                dcc.Graph(
+                    id='greed-winrate',
+                    figure=fig_greed_plot(qb.copy(), position),
+                    responsive=True,
+                    style={'width': '100%'}
                 )
             ]
         ),
@@ -275,68 +302,6 @@ def show_error(figure):
         }
         return [], style
 
-# @callback(
-#         Output('total-matches', 'children'),
-#         Output('stat-radiant-win', 'children'),
-#         Output('stat-avg-duration', 'children'),
-#         Output('stat-avg-kills', 'children'),
-#         Output('top-heroes', 'figure'),
-#         Output('duration-distr', 'figure'),
-#         Input('analysis-navigation-tabs', 'value'),
-#         State('url', 'pathname'),
-#         Input('top-heroes-select', 'value'),
-#         *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
-#         prevent_initial_call=True
-# )
-# def update_overview(active_tab, pathname, graph_select, *args):
-#     if pathname != '/':
-#         return no_update
-#     filters = {
-#         f.filter_name: ctx.inputs.get(f'{f.component_id}.value')
-#         for f in FILTERS
-#     }
-#     qb = QueryBuilder()
-#     qb = Filter.handle_filters(qb, **filters)
-#     query, params = qb.build(
-#         select='''
-#             COUNT(*),
-#         AVG(CAST("didRadiantWin" AS INT)),
-#         AVG("durationSeconds")
-#         '''
-#     )
-#     results = db.query_select(query, params=params)[0]
-#     found_matches = results[0]
-#     if found_matches == 0:
-#         return found_matches, 0, 0, None, None, None
-#     if len(results) == 0:
-#         return 0, 0, 0, None, None, None
-#     radiant_win = str(round(results[1], 2)) + '%'
-#     avg_game_length = convert_duration_format(results[2]) 
-#     query, params = qb.build(select='AVG(radiant_score + dire_score)')
-#     avg_kills = round(db.query_select(query, params=params)[0][0], 0)
-#     try:
-#         if filters['heroes']:
-#             query, params = qb.build('md.id')
-#             ids = [r[0] for r in db.query_select(query, params=params)]
-#             qb_heroes = QueryBuilder()
-#             qb_heroes.where('md.id = ANY(%s)', ids)
-#             qb_heroes = Filter.handle_filters(qb_heroes, **filters, exclude='heroes')
-#         else:
-#             qb_heroes = qb.copy()
-#         match graph_select:
-#             case 'win':
-#                 top_heroes_fig = fig_top_winrate(qb_heroes.copy(), found_matches)
-#             case 'pick':
-#                 top_heroes_fig = fig_most_picked(qb_heroes.copy(), found_matches)
-#             case 'ban':
-#                 top_heroes_fig = fig_most_banned(qb_heroes.copy(), found_matches)
-#             case 'pres':
-#                 top_heroes_fig = fig_most_present(qb_heroes.copy(), found_matches)      
-#     except:
-#         top_heroes_fig = None
-#     duration_fig = fig_duration_hist(qb.copy())
-#     return found_matches, radiant_win, avg_game_length, avg_kills, top_heroes_fig, duration_fig 
-
 def stat_card(label, id, value):
     return dmc.Paper(
         withBorder=True,
@@ -347,5 +312,3 @@ def stat_card(label, id, value):
             dmc.Title(value, id=id, order=2)
         ]
     )
-
-

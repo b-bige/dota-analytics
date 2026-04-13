@@ -28,19 +28,18 @@ vs_logo = dmc.Avatar(
 
 dash.register_page(__name__, path='/find-match')
 
-# Dash Pages allows 'layout' to be a function to capture search params
 def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
         size='lg',
         children=[ 
             dmc.ScrollArea(
-                h=550, # Fixed height helps with ScrollArea behavior
+                h=550,
                 offsetScrollbars=True,
                 children=[
                     dmc.SimpleGrid(
                         id='match-container', 
-                        cols=2,        # Force 2 items per row
-                        spacing="md",  # Gap between cards,
+                        cols=2,        
+                        spacing="md", 
                         mt=10,
                         children=[]
                     )
@@ -85,10 +84,9 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
     qb = QueryBuilder()
     Filter.handle_filters(qb, **filters)
     query, params = qb.build(select='COUNT(md.id)')
-    total_records = db.query_select(query, params=params)[0][0]
-    total_pages = -(-total_records // PAGE_SIZE)  # ceiling division
+    total_records = db.select(query, params=params)[0][0]
+    total_pages = -(-total_records // PAGE_SIZE)  
 
-    # check if page should reset
     if triggered != 'match-pagination':
         url_params = parse_qs(search.lstrip('?'))
         url_filters = {
@@ -123,9 +121,8 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
         'radiant_name', 'dire_name', 'radiant_logo', 'dire_logo', 'league_name',
         'rad_rating', 'dire_rating'
     ]
-    matches = [dict(zip(columns, row)) for row in db.query_select(query, params=params)]
+    matches = [dict(zip(columns, row)) for row in db.select(query, params=params)]
     elements = [create_match_element(row) for row in matches]
-    # elements = [create_match_element(row) for row in matches]
     return elements, total_pages, page_number
     
 
@@ -146,7 +143,6 @@ def create_match_element(row: dict):
     return dcc.Link(
         href=f"/match/{row['match_id']}",
         refresh=False,
-        # Make the link fill its grid slot, without weird blue underlines
         style={'textDecoration': 'none', 'color': 'inherit', 'display': 'block'}, 
         children=[
             dmc.Paper(
@@ -154,12 +150,10 @@ def create_match_element(row: dict):
                 shadow='sm',
                 p='md',
                 radius='md',
-                # A subtle hover effect makes it feel like an interactive app
                 style={"transition": "transform 0.2s ease"},
                 className="match-card-hover",
                 children=[
                     
-                    # 1. HEADER: League & Match Result
                     dmc.Group(
                         justify="space-between",
                         mb="md",
@@ -169,12 +163,10 @@ def create_match_element(row: dict):
                         ]
                     ),
                     
-                    # 2. BODY: The "VS" Matchup
                     dmc.Group(
-                        justify="center", # Center the teams
-                        gap="xl",         # Large gap between Team A, VS, and Team B
+                        justify="center", 
+                        gap="xl",         
                         children=[
-                            # Radiant Side
                             dmc.Stack(align="center", gap=0, children=[
                                 dmc.Image(src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
                                 dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm") if row['radiant_name'] else
@@ -182,10 +174,8 @@ def create_match_element(row: dict):
                                 dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed")
                             ]),
                             
-                            # The "VS" Text
                             dmc.Text("VS", fw=900, size="lg", c="dimmed"),
                             
-                            # Dire Side
                             dmc.Stack(align="center", gap=0, children=[
                                 dmc.Image(src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
                                 dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm") if row['dire_name'] else
@@ -195,10 +185,8 @@ def create_match_element(row: dict):
                         ]
                     ),
                     
-                    # Divider to separate stats
                     dmc.Divider(variant="dashed", my="sm"),
                     
-                    # 3. FOOTER: Match Metadata
                     dmc.Group(
                         justify="space-between",
                         children=[

@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath('./src/logger'))
 
 import logging
 
-from db_functions import DotaDB
+from dota_db import DotaDB
 
 class LiveMatchMonitor:
     def __init__(self, db: DotaDB):
@@ -19,10 +19,10 @@ class LiveMatchMonitor:
         self.httpx_client = httpx.Client()
 
     def update_live_database(self):
-        all_live = self.db.query_opendota(self.httpx_client, 'live')
+        all_live = self.db.fetch_opendota(self.httpx_client, 'live')
         current_api_ids = []
-        leagues = {row[0]: row[1] for row in self.db.query_select('SELECT id, "displayName" FROM league_details')}
-        archived_ids = [r[0] for r in self.db.query_select('SELECT match_id FROM archive_live_match_ids')]
+        leagues = {row[0]: row[1] for row in self.db.select('SELECT id, "displayName" FROM league_details')}
+        archived_ids = [r[0] for r in self.db.select('SELECT match_id FROM archive_live_match_ids')]
         for m in all_live:
             league_id = m.get('league_id') 
             if league_id == 0 or not league_id: continue
@@ -82,28 +82,28 @@ class LiveMatchMonitor:
         UNION
         SELECT match_id FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished AND status = 'active'
         """
-        active_ids = [r[0] for r in self.db.query_select(query)]  
+        active_ids = [r[0] for r in self.db.select(query)]  
         query = "SELECT match_id FROM live_matches WHERE status = 'pending_parse'"
-        pending_ids = [r[0] for r in self.db.query_select(query)]
+        pending_ids = [r[0] for r in self.db.select(query)]
         for mid in active_ids:
             try:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
                 self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
-                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
+                self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
             except:
                 self.db.request_parse_opendota(self.httpx_client, mid)
-                self.db.query_execute("UPDATE live_matches SET stauts = 'pending_parse' WHERE match_id = %s", params=(mid, ))
+                self.db.query_execute("UPDATE live_matches SET status = 'pending_parse' WHERE match_id = %s", params=(mid, ))
         for mid in pending_ids:
             if self.db.is_match_parsed_opendota(self.httpx_client, mid):
                 self.db.fetch_match_opendota(self.httpx_client, mid)
                 self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
-                self.db.query_execute('DELETE FROM live_matches WHERE match_id = %s', params=(mid, ))
+                self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
 
     def get_league_details(self, league_id):
         """Returns league name. Fetches from API and saves the details after to the db."""
-        result = self.db.query_opendota(self.httpx_client, f'leagues/{league_id}')
+        result = self.db.fetch_opendota(self.httpx_client, f'leagues/{league_id}')
         if result:
             try:
                 query = 'INSERT INTO league_details (id, "displayName", tier) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING'
@@ -121,14 +121,14 @@ class LiveMatchMonitor:
         
         if team_id in self.logo_cache:
             return self.logo_cache[team_id]
-        db_row = self.db.query_select("SELECT logo_url FROM team_logos WHERE team_id = %s", params=(team_id,))
+        db_row = self.db.select("SELECT logo_url FROM team_logos WHERE team_id = %s", params=(team_id,))
         if db_row:
             url = db_row[0][0]
             self.logo_cache[team_id] = url
             return url
         try:
             logging.info(f"Fetching logo for new team: {team_name} ({team_id})")
-            results = self.db.query_opendota(self.httpx_client, f'teams/{team_id}')
+            results = self.db.fetch_opendota(self.httpx_client, f'teams/{team_id}')
             url = results.get("logo_url") or "/assets/no_image.svg"
             
             # Save to DB so we have it for next time
@@ -152,5 +152,6 @@ class LiveMatchMonitor:
 
 monitor = LiveMatchMonitor(DotaDB())
 if __name__ == '__main__':
-    with httpx.Client() as client:
-        monitor.db.fetch_match_opendota(client, match_id=8760986413)
+    monitor.run_forever(interval=180)
+    # with httpx.Client() as client:
+    #     monitor.db.fetch_match_opendota(client, match_id=8760986413)

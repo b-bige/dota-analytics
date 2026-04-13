@@ -19,7 +19,6 @@ vs_logo = dmc.Avatar(
     }
 )
 
-# The <match_id> syntax tells Dash to pass that part of the URL as a variable
 dash.register_page(__name__, path_template='/match/<match_id>')
 
 def layout(match_id=None, **kwargs):
@@ -29,10 +28,10 @@ def layout(match_id=None, **kwargs):
 
 def render_match_page(match_id):
     query = 'SELECT "didRadiantWin", "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
-    rad_win, rad_team_id, dire_team_id = db.query_select(query, params=(match_id, ))[0]
+    rad_win, rad_team_id, dire_team_id = db.select(query, params=(match_id, ))[0]
     query = 'SELECT name, logo FROM team_details WHERE id = %s'
-    rad = db.query_select(query, params=(rad_team_id, ))
-    dire = db.query_select(query, params=(dire_team_id, ))
+    rad = db.select(query, params=(rad_team_id, ))
+    dire = db.select(query, params=(dire_team_id, ))
     logo_query = 'SELECT logo_url FROM team_logos WHERE team_id = %s'
     if rad:
         rad_name = rad[0]
@@ -42,7 +41,7 @@ def render_match_page(match_id):
         rad_logo = ''
     if not rad_logo:
         try:
-            rad_logo = db.query_select(logo_query, params=(rad_team_id, ))[0]
+            rad_logo = db.select(logo_query, params=(rad_team_id, ))[0]
         except:
             rad_logo = '/assets/no_image.svg'
     if dire:
@@ -53,7 +52,7 @@ def render_match_page(match_id):
         dire_logo = ''
     if not dire_logo:
         try:
-            dire_logo = db.query_select(logo_query, params=(dire_team_id, ))[0]
+            dire_logo = db.select(logo_query, params=(dire_team_id, ))[0]
         except:
             dire_logo = '/assets/no_image.svg'
     query = '''
@@ -104,26 +103,24 @@ def render_match_page(match_id):
             END ASC,
             mp.position ASC
     '''
-    players_list = db.query_select(query, params=(match_id, ))
+    players_list = db.select(query, params=(match_id, ))
     result_color = COLORS['radiant'] if rad_win else COLORS['dire']
     return dmc.Container(size="xl", fluid=True, children=[
         dmc.Grid(gutter="md", children=[
-            
-            # --- ROW 1: HEADER STATS (Full Width) ---
             dmc.GridCol(span=12, children=[
                 dmc.Paper(withBorder=True, p="md", children=[
                     html.Div(style={"display": "flex", "alignItems": "center", "width": "100%"}, children=[
-                        # Left side - Radiant
+
                         html.Div(style={"flex": "1 1 0", "display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "12px"}, children=[
                             dmc.Badge('Radiant win', color=result_color, variant='filled') if rad_win else None,
                             dmc.Image(src=rad_logo if rad_logo else '/assets/no_image.svg', w=100),
                             dmc.Text(f'{rad_name}'),
                         ]),
-                        # Center - VS logo (fixed, doesn't grow)
+
                         html.Div(style={"flex": "0 0 auto", "padding": "0 24px"}, children=[
                             vs_logo
                         ]),
-                        # Right side - Dire
+
                         html.Div(style={"flex": "1 1 0", "display": "flex", "alignItems": "center", "justifyContent": "flex-start", "gap": "12px"}, children=[
                             dmc.Text(f'{dire_name}'),
                             dmc.Image(src=dire_logo if dire_logo else '/assets/no_image.svg', w=100),
@@ -132,45 +129,21 @@ def render_match_page(match_id):
                     ])
                 ])
             ]),
-
-            # --- ROW 2: THE MAIN BATTLEFIELD ---
             
-            # 1. Radiant Heroes (3 columns)
             dmc.GridCol(span=12, children=[
                 dmc.Stack([
                     dmc.Text("Radiant", fw=700, c="green"),
-                    # Create 5 hero placeholders
+
                     create_match_table(players_list[:5], True)
                 ])
             ]),
 
-            # 3. Dire Heroes (3 columns)
             dmc.GridCol(span=12, children=[
                 dmc.Stack([
                     dmc.Text("Dire", fw=700, c="red"),
-                    # Create 5 hero placeholders
                     create_match_table(players_list[5:], False)
                 ])
             ]),
-
-            # dmc.GridCol(span=8, children=[
-            #     dmc.Paper(withBorder=True, p="sm", h="100%", children=[
-            #         dmc.Text("Net Worth Advantage", size="xs", mb="sm"),
-            #         dmc.Skeleton(height=300, width="100%"), # The Graph placeholder
-            #         dmc.Group([
-            #             dmc.Skeleton(height=40, width=100),
-            #             dmc.Skeleton(height=40, width=100),
-            #         ], justify="center", mt="md")
-            #     ])
-            # ]),
-
-            # # --- ROW 3: REPLAY / LOGS (Full Width) ---
-            # dmc.GridCol(span=12, children=[
-            #     dmc.Paper(withBorder=True, p="md", children=[
-            #         dmc.Skeleton(height=20, width="30%", mb="md"), # "Match Timeline" title
-            #         dmc.Skeleton(height=100, width="100%"),
-            #     ])
-            # ])
         ])
     ])
 
@@ -187,7 +160,7 @@ def create_match_table(players_list, is_radiant:bool):
     )
     rows = []
     for player in players_list:
-        rows.append(create_match_row(*player)) #TODO: remove is_radiant, position from params, add steam acc id somehow
+        rows.append(create_match_row(*player)) 
     return dmc.Table(
         children=[header, dmc.TableTbody(rows)],
         verticalSpacing='xs',
@@ -211,14 +184,12 @@ def create_match_row(hero_name, hero_display_name, is_radiant, position, networt
     kda = f'{str(kills)} / {str(deaths)} / {str(assists)}'
 
     return dmc.TableTr([
-        # Hero Cell: Image + Name
         dmc.TableTd(
             dmc.Group([
                 dmc.Image(src=img_url, w=40, radius="xs"),
                 dmc.Text(hero_display_name, size="sm", fw=600, truncate=True)
             ], gap="sm")
         ),
-        # Stats Cells
         dmc.TableTd(kda, style={'textAlign': 'right'}),
         networth_td,
         dmc.TableTd(f'{gpm:,}', style={"textAlign": "right"}),

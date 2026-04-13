@@ -5,11 +5,11 @@ import sys
 import httpx
 
 sys.path.append(os.path.abspath('./src'))
-import db_functions as dbf
+from dota_db import DotaDB
 from basic_logger import setup_logger
 
 setup_logger(logfile_path='logs/fetch_teams.log')
-db = dbf.DotaDB()
+db = DotaDB()
 
 def main():
     query = '''
@@ -19,7 +19,7 @@ def main():
         SELECT DISTINCT "direTeamId" 
         FROM match_details;
     '''
-    team_ids = [tid[0] for tid in db.query_select(query)]
+    team_ids = [tid[0] for tid in db.select(query)]
     query = '''
         query($teamIds: [Int]!) {
             teams(teamIds: $teamIds) {
@@ -41,7 +41,7 @@ def main():
             }
         }
     '''
-    saved_ids = [res[0] for res in db.query_select('SELECT id FROM team_details')]
+    saved_ids = [res[0] for res in db.select('SELECT id FROM team_details')]
     for tid in saved_ids:
         if tid in team_ids:
             team_ids.remove(tid)
@@ -53,7 +53,7 @@ def main():
                 variables = {'teamIds': team_ids[i:]}
             else:
                 variables = {'teamIds': team_ids[i:(i+5)]}
-            result = db.query_stratz(client, query, variables)['data']['teams']
+            result = db.fetch_stratz(client, query, variables)['data']['teams']
             for team in result:
                 storage.append(team)
                 team_leagues.extend((team['id'], league['id']) for league in team['leagues'])

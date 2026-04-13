@@ -2,10 +2,10 @@ import sys
 import os
 sys.path.append(os.path.abspath('./src'))
 
-from db_functions import DotaDB
+from dota_db import DotaDB
 
-## Script for adding the Foreign Key Constraint on match_id column on all tables that are
-## related to a specific match. For two tables including snapshots, this was done in constraints.sql
+## Script for adding the Foreign Key Constraint 
+## on match_id column on all tables that are related to a specific match.
 
 def main():
     db = DotaDB(schema='kaggle')
@@ -19,7 +19,7 @@ def main():
         cascade=True)
 
 def get_match_tables(db: DotaDB):
-    all_tables = [match_table[0] for match_table in db.query_select('SELECT table_name FROM information_schema.tables')]
+    all_tables = [match_table[0] for match_table in db.select('SELECT table_name FROM information_schema.tables')]
     match_tables = []
     for table in all_tables:
         if table.startswith('match_') and table not in ['match_details', 'match_outpost_updates', 'match_tower_updates']:
@@ -27,7 +27,7 @@ def get_match_tables(db: DotaDB):
     return match_tables
 
 def get_kaggle_reference_tables(db: DotaDB):
-    tables = [match_table[0] for match_table in db.query_select(
+    tables = [match_table[0] for match_table in db.select(
         "SELECT table_name FROM information_schema.tables WHERE table_schema = 'kaggle'"
     ) if match_table[0] != 'main_metadata' and not match_table[0].startswith('Constants_')]
     return tables
@@ -41,7 +41,7 @@ def add_foreign_keys(db: DotaDB, tables: list, foreign_key, reference_table, pri
             FOREIGN KEY ("{foreign_key}")
             REFERENCES "{reference_table}" ("{primary_key}")
         '''
-        if(db.query_select("""
+        if(db.select("""
                 SELECT 1 FROM information_schema.table_constraints
                 WHERE constraint_name = %s AND table_name = %s
             """, params=(constraint_name, table))):

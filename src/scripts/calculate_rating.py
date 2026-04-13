@@ -7,23 +7,23 @@ import os, sys, logging
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from db_functions import DotaDB
+from dota_db import DotaDB
 from basic_logger import setup_logger
 
 CORE_WEIGHTS = {
-    'gold_per_min':  0.40,  # dominant
-    'assists':       0.35,  # nearly as strong
-    'net_worth':     0.15,  # positive but weaker once gpm/assists included
-    'tower_damage':  0.07,  # positive
-    'kills':         0.03,  # weak positive
+    'gold_per_min':  0.40,  
+    'assists':       0.35,  
+    'net_worth':     0.15,  
+    'tower_damage':  0.07, 
+    'kills':         0.03, 
 }
 
 SUPPORT_WEIGHTS = {
-    'gold_per_min':  0.35,  # still dominant even for supports
-    'assists':       0.40,  # strongest support signal
-    'net_worth':     0.12,  # positive
-    'tower_damage':  0.05,  # weak positive
-    'obs_placed':    0.05,  # weak positive
+    'gold_per_min':  0.35,  
+    'assists':       0.40,  
+    'net_worth':     0.12, 
+    'tower_damage':  0.05, 
+    'obs_placed':    0.05,  
     'observer_kills': 0.02,
     'camps_stacked':  0.01,
 }
@@ -40,7 +40,7 @@ if not MIN_SAMPLES:
 else:
     MIN_SAMPLES = int(MIN_SAMPLES)
 
-setup_logger(logfile_path='logs/calculate_rating.log')
+listener = setup_logger(logfile_path='logs/calculate_rating.log')
 log = logging.getLogger(__name__)
 db = DotaDB(schema='public', local=True)
 NUMERATOR = input('Enter TAU numerator for rating model (leave blank for model default 25): ')
@@ -90,17 +90,14 @@ def main():
                 if pd.notna(mean) and pd.notna(std) and std > 0:
                     baseline_cache[(hero_id, patch, col)] = (mean, std)
     log.info("Loading metadata...")
-    metadata = db.query_select_to_df('SELECT * FROM main_metadata', table='main_metadata')
+    metadata = db.select_to_df('SELECT * FROM main_metadata', table='main_metadata')
     metadata['start_date_time'] = pd.to_datetime(metadata['start_date_time'])
     metadata = metadata.sort_values(by='start_date_time').reset_index(drop=True)
 
-    # Build lookup dicts from metadata
     radiant_win_lookup = dict(zip(metadata['match_id'], metadata['radiant_win']))
 
-
-    # Get match IDs that have player data, sorted chronologically
     match_ids_with_players = [
-        mid[0] for mid in db.query_select(
+        mid[0] for mid in db.select(
             '''SELECT DISTINCT pms.match_id, mm.start_date_time 
                FROM player_match_stats pms
                JOIN main_metadata mm ON mm.match_id = pms.match_id
@@ -113,7 +110,7 @@ def main():
     total = len(match_ids_with_players)
     for i in range(0, total, BATCH_SIZE):
         batch = match_ids_with_players[i:i + BATCH_SIZE]
-        players_df = db.query_select_to_df(
+        players_df = db.select_to_df(
             'SELECT * FROM player_match_stats WHERE match_id = ANY(%s)',
             params=(batch,),
             table='player_match_stats'
@@ -158,7 +155,7 @@ def compute_hero_stats(db: DotaDB):
     Called once before the rating pipeline runs.
     """
     print("Loading player stats for hero baseline computation...")
-    df = db.query_select_to_df(
+    df = db.select_to_df(
         f'''SELECT hero_id, patch, {', '.join(STAT_COLS)}
             FROM player_match_stats
             WHERE hero_id IS NOT NULL
@@ -166,16 +163,12 @@ def compute_hero_stats(db: DotaDB):
             columns=['hero_id', 'patch'] + STAT_COLS
     )
 
-    # Level 1 — hero + patch (most specific)
     hero_patch_stats = df.groupby(['hero_id', 'patch'])[STAT_COLS].agg(['mean', 'std', 'count'])
 
-    # Level 2 — hero only (fallback when patch has too few samples)
     hero_stats = df.groupby('hero_id')[STAT_COLS].agg(['mean', 'std', 'count'])
 
-    # Level 3 — patch only (fallback for unknown heroes)
     patch_stats = df.groupby('patch')[STAT_COLS].agg(['mean', 'std'])
 
-    # Level 4 — global (last resort)
     global_stats = df[STAT_COLS].agg(['mean', 'std'])
 
     print(f"Hero/patch combinations: {len(hero_patch_stats)}")
@@ -193,7 +186,6 @@ def get_stat_baseline(col, hero_id, patch):
     if result:
         return result
 
-    # Level 2 — hero only
     if hero_id in hero_stats.index:
         count = hero_stats.loc[hero_id, (col, 'count')]
         if count >= MIN_SAMPLES:
@@ -202,14 +194,12 @@ def get_stat_baseline(col, hero_id, patch):
             if pd.notna(mean) and pd.notna(std) and std > 0:
                 return mean, std
 
-    # Level 3 — patch only
     if patch in patch_stats.index:
         mean = patch_stats.loc[patch, (col, 'mean')]
         std  = patch_stats.loc[patch, (col, 'std')]
         if pd.notna(mean) and pd.notna(std) and std > 0:
             return mean, std
 
-    # Level 4 — global fallback
     mean = global_stats.loc['mean', col]
     std  = global_stats.loc['std', col]
     if pd.notna(mean) and pd.notna(std) and std > 0:
@@ -286,7 +276,7 @@ def compute_draft_features(db: DotaDB):
         GROUP BY hero_id, patch
         HAVING COUNT(*) >= 20
         '''
-    hero_winrates = db.query_select_to_df(query, columns=['hero_id', 'patch', 'winrate', 'match_count'])
+    hero_winrates = db.select_to_df(query, columns=['hero_id', 'patch', 'winrate', 'match_count'])
     query = '''
         SELECT 
             LEAST(mp1.hero_id, mp2.hero_id)    as hero1,
@@ -301,7 +291,7 @@ def compute_draft_features(db: DotaDB):
         GROUP BY 1, 2
         HAVING COUNT(*) >= 20
         '''
-    hero_synergy = db.query_select_to_df(query, columns=['hero_id1', 'hero_id2', 'pair_winrate', 'match_count'])
+    hero_synergy = db.select_to_df(query, columns=['hero_id1', 'hero_id2', 'pair_winrate', 'match_count'])
     query = '''
         SELECT 
             mp1.hero_id as hero_id,
@@ -315,7 +305,7 @@ def compute_draft_features(db: DotaDB):
         GROUP BY 1, 2
         HAVING COUNT(*) >= 20
         '''
-    hero_counters = db.query_select_to_df(query, columns=['hero_id', 'enemy_hero_id', 'winrate_vs', 'match_count'])
+    hero_counters = db.select_to_df(query, columns=['hero_id', 'enemy_hero_id', 'winrate_vs', 'match_count'])
     hero_winrates['winrate']      = hero_winrates['winrate'].astype(float)
     hero_synergy['pair_winrate']  = hero_synergy['pair_winrate'].astype(float)
     hero_counters['winrate_vs']   = hero_counters['winrate_vs'].astype(float)
@@ -331,10 +321,9 @@ def calculate_draft_strength(team_heroes, enemy_heroes, patch,
     enemy_heroes: list of hero_ids for the enemy team
     patch:        current patch int
     """
-    # ── 1. Individual hero win rates ─────────────────────────────────────────
+
     wr_scores = []
     for hero_id in team_heroes:
-        # try patch-specific first, fall back to overall
         patch_wr = hero_winrates[
             (hero_winrates['hero_id'] == hero_id) &
             (hero_winrates['patch'] == patch) 
@@ -349,11 +338,10 @@ def calculate_draft_strength(team_heroes, enemy_heroes, patch,
             if len(overall_wr) > 0:
                 wr_scores.append(overall_wr.mean())
             else:
-                wr_scores.append(0.50)  # unknown hero — assume neutral
+                wr_scores.append(0.50)  
 
     hero_wr_score = np.mean(wr_scores)
 
-    # ── 2. Team synergy — all hero pairs ────────────────────────────────────
     synergy_scores = []
     for i, h1 in enumerate(team_heroes):
         for h2 in team_heroes[i+1:]:
@@ -368,7 +356,6 @@ def calculate_draft_strength(team_heroes, enemy_heroes, patch,
 
     synergy_score = np.mean(synergy_scores) if synergy_scores else 0.50
 
-    # ── 3. Counter score — how well this team counters the enemy ────────────
     counter_scores = []
     for hero_id in team_heroes:
         for enemy_id in enemy_heroes:
@@ -381,7 +368,6 @@ def calculate_draft_strength(team_heroes, enemy_heroes, patch,
 
     counter_score = np.mean(counter_scores) if counter_scores else 0.50
 
-    # ── Weighted combination ─────────────────────────────────────────────────
     draft_score = (
         hero_wr_score  * 0.40 +
         synergy_score  * 0.35 +
@@ -414,7 +400,6 @@ def process_match_with_players(match_id, players_df, radiant_win):
     radiant_ratings = [get_rating(pid) for pid in radiant_ids]
     dire_ratings    = [get_rating(pid) for pid in dire_ids]
 
-    # ── Store PRE-match ratings in history ───────────────────────────────────
     for pid, r in zip(radiant_ids, radiant_ratings):
         if not isinstance(pid, str):
             rating_history.append({
@@ -442,7 +427,6 @@ def process_match_with_players(match_id, players_df, radiant_win):
         'dire_draft_strength': dire_draft
     })
         
-    # Get weights
     radiant_weights, dire_weights = get_team_weights(radiant), get_team_weights(dire)
     if radiant_win:
         new_radiant, new_dire = model.rate(

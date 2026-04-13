@@ -43,7 +43,7 @@ class DotaDB:
         dbname = os.getenv("DB_NAME")
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
 
-    def query_select(self, query, params=None, identifiers=None):
+    def select(self, query, params=None, identifiers=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -53,7 +53,7 @@ class DotaDB:
                 cur.execute(final_query, params)
                 return cur.fetchall() if cur.description else None
             
-    def query_select_to_df(self, query, columns=None, params=None, identifiers=None, table=None):
+    def select_to_df(self, query, columns=None, params=None, identifiers=None, table=None):
         with psycopg.connect(self.conn_str) as conn:
             with conn.cursor() as cur:
                 if identifiers:
@@ -68,12 +68,11 @@ class DotaDB:
                         return pd.DataFrame(data, columns=columns)
                     else:
                         table_query = "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name = %s"
-                        table_columns = [c[0] for c in self.query_select(table_query, params=(table, ))]
+                        table_columns = [c[0] for c in self.select(table_query, params=(table, ))]
                         return pd.DataFrame(data, columns=table_columns)
                 return None
             
     def create_table_from_df(self, df, table_name, convert_dtypes=True, add_serial_id=False, jsonb_cols=[]):
-        # 1. Generate column definitions
         if convert_dtypes:
             schema_df = df.convert_dtypes()
         else:
@@ -93,7 +92,6 @@ class DotaDB:
                         primary_key_assigned = True
                     else:
                         pg_type = self.get_pg_type(dtype)
-                        # Wrap column names in quotes to handle spaces or reserved words
                         cols.append(f'"{col_name}" {pg_type}')
                 for col_name in jsonb_cols:
                     cols.append(f'"{col_name}" JSONB')
@@ -112,11 +110,6 @@ class DotaDB:
         logging.info(f"Table '{table_name}' created successfully.")
 
     def insert_df_into_table(self, df, table_name, conflict_cols=[], update_cols=None, jsonb_cols=[]):
-        """
-        Inserts a DataFrame using COPY into a temp table, then performs an UPSERT or plain INSERT.
-        - conflict_cols: Column(s) for unique constraint. If empty, a plain INSERT is performed.
-        - update_cols: Columns to update on conflict. Defaults to all non-conflict columns.
-        """
         if df.empty:
             return
 
@@ -130,7 +123,6 @@ class DotaDB:
         col_names = [f'"{c}"' for c in clean_df.columns]
         col_names_str = ", ".join(col_names)
         
-        # 1. Logic for Upsert vs Plain Insert
         upsert_clause = ""
         if conflict_cols:
             if update_cols is None:
@@ -143,16 +135,13 @@ class DotaDB:
         try:
             with psycopg.connect(self.conn_str) as conn:
                 with conn.cursor() as cur:
-                    # 2. Create a temporary staging table
                     cur.execute(f'CREATE TEMP TABLE staging_table AS SELECT * FROM "{table_name}" LIMIT 0')
 
-                    # 3. Fast COPY into staging
                     copy_query = f'COPY staging_table ({col_names_str}) FROM STDIN'
                     with cur.copy(copy_query) as copy:
                         for row in clean_df.itertuples(index=False):
                             copy.write_row(row)
 
-                    # 4. Final Transfer (Upsert if conflict_cols present, otherwise simple Insert)
                     final_query = f"""
                         INSERT INTO "{table_name}" ({col_names_str})
                         SELECT {col_names_str} FROM staging_table
@@ -209,7 +198,7 @@ class DotaDB:
     @limits(calls=200, period=60)
     @limits(calls=2000, period=3600)
     @limits(calls=10000, period=86400)
-    def query_stratz(self, client: httpx.Client, query: str, variables:dict={}):
+    def fetch_stratz(self, client: httpx.Client, query: str, variables:dict={}):
         response = client.post(
             url=self.stratz_url,
             json={'query': query, 'variables': variables}
@@ -222,8 +211,32 @@ class DotaDB:
         if "data" not in result:
             raise KeyError(f"No data in result, probably rate limit exceeded: {result}")
         return result
+    
+    def try_fetch_stratz_match(self, match_id):
+        query = """
+            query($id: Long!) {
+                match(id: $id) {
+                    id
+                    parsedDateTime
+                }
+            }
+        """
+        with httpx.Client(headers=self.stratz_headers) as client:
+            match = self.fetch_stratz(client, query, variables={'id': match_id})['data']['match']
+        print(match)
+        if not match:
+            return False
+        parsed_timestamp = match.get('parsedDateTime', None)
+        if not parsed_timestamp:
+            return False
+        is_saved = self.fetch_stratz_matches([match_id])
+        if is_saved:
+            return is_saved
+        else:
+            logging.error(f'Failed to fetch match details from stratz for ID {match_id}')
+            return False
 
-    def query_matches(self, match_ids):
+    def fetch_stratz_matches(self, match_ids):
         query = """
             query($id: Long!) {
                 match(id: $id) {
@@ -439,18 +452,16 @@ class DotaDB:
             'wards': 'match_wards', 'wardDestruction': 'match_ward_destructions'
         }
 
-        # 2. Initialize storage for ALL matches
         storage = {key: [] for key in table_map.keys()}
         with httpx.Client(headers=self.stratz_headers) as client:
             for iteration, match_id in enumerate(match_ids):
-                if iteration % 100 == 0: ## After 1000 matches, save and empty memory
+                if iteration % 100 == 0: 
                     self._flush_storage(storage, table_map)
                     storage = {key: [] for key in table_map.keys()}
                 logging.info(f"Processing {match_id} ({iteration+1}/{len(match_ids)})")
                 try:
-                    # Fetch data
                     variables = {'id': match_id}
-                    match_json = self.query_stratz(client, query, variables=variables)['data']['match']
+                    match_json = self.fetch_stratz(client, query, variables=variables)['data']['match']
                     if not match_json:
                         logging.warning(f"There was no match data for match {match_id} ({iteration+1}/{len(match_ids)})")
                         continue
@@ -462,7 +473,6 @@ class DotaDB:
                             match_details[key] = value
                     storage['details'].append(match_details)
 
-                    # PickBans (Extend because it's a list)
                     pb = match_json.get('pickBans', [])
                     if pb:
                         for entry in pb: 
@@ -545,12 +555,12 @@ class DotaDB:
                                 'order_index': index
                             })
 
-                            towers = buildings['towers'] ##TODO: also filter this maybe?
+                            towers = buildings['towers'] 
                             for entry in towers:
                                 entry['snapshot_id'] = snapshot_id
                             tower_updates.extend(towers)
 
-                            outposts = buildings['outposts'] ##TODO: This is often empty, might want to filter?
+                            outposts = buildings['outposts'] 
                             for entry in outposts:
                                 entry['snapshot_id'] = snapshot_id
                             outpost_updates.extend(outposts)
@@ -660,6 +670,7 @@ class DotaDB:
                     continue
                 logging.info(f"Iteration {iteration} with match {match_id} processed successfully")
             self._flush_storage(storage, table_map)
+            return True
 
     def _flush_storage(self, storage, table_map):
         for key, data_list in storage.items():
@@ -669,11 +680,11 @@ class DotaDB:
             df = pd.DataFrame(data_list)
             if key == 'details':
                 match_ids = list(df['id'])
-                current_ids = [cid[0] for cid in self.query_select('SELECT id FROM match_details')]
+                current_ids = [cid[0] for cid in self.select('SELECT id FROM match_details')]
                 for mid in match_ids.copy():
                     if mid in current_ids:
                         df = df[df['id'] != mid]
-            # Mapping of keys to their specific column renames
+
             renames = {
                 'leads': {'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'},
                 'kills': {'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'},
@@ -694,8 +705,8 @@ class DotaDB:
             self.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
     
-    def query_opendota(self, client: httpx.Client, endpoint):
-        response = client.get(f'{self.opendota_url}/{endpoint}') #TODO: Implement similar client logic to query_matches
+    def fetch_opendota(self, client: httpx.Client, endpoint):
+        response = client.get(f'{self.opendota_url}/{endpoint}') 
         try:
             response.raise_for_status()
             result = response.json()
@@ -726,6 +737,7 @@ class DotaDB:
             return False
     
     def fetch_match_opendota(self, client: httpx.Client, match_id):
+        #TODO: refactor and optimize
         try:
             response = client.get(f'{self.opendota_url}/matches/{match_id}')
             response.raise_for_status()
@@ -743,11 +755,11 @@ class DotaDB:
                 "9": "SHIELD"
             }
             query = 'SELECT * FROM hero_details'
-            heroes = self.query_select_to_df(query, table='hero_details')
-            query = 'SELECT * FROM item_details_opendota' #These 3 could be optimized by moving to class properties or something else
-            items = self.query_select_to_df(query, table='item_details_opendota')  
+            heroes = self.select_to_df(query, table='hero_details') ##TODO
+            query = 'SELECT * FROM item_details_opendota' 
+            items = self.select_to_df(query, table='item_details_opendota') ##TODO
             query = 'SELECT * FROM npcs'
-            npcs = self.query_select_to_df(query, table='npcs')
+            npcs = self.select_to_df(query, table='npcs') ##TODO
             mid = result['match_id']
             mid = result['match_id']
             table_names = [
@@ -893,8 +905,3 @@ class DotaDB:
             return "TIMESTAMP"
         else:
             return "TEXT"
-        
-if __name__ == '__main__':
-    db = DotaDB()
-    with httpx.Client() as client:
-        db.fetch_match_opendota(client, 8760126026)

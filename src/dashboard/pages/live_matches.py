@@ -23,13 +23,13 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         children=[ 
             dcc.Interval(id='live-update-timer', interval=30*1000, n_intervals=0),
             dmc.ScrollArea(
-                h=600, # Fixed height helps with ScrollArea behavior
+                h=600, 
                 offsetScrollbars=True,
                 children=[
                     dmc.SimpleGrid(
                         id='live-match-container', 
-                        cols=2,        # Force 2 items per row
-                        spacing="md",  # Gap between cards,
+                        cols=2,        
+                        spacing="md",  
                         mt=10,
                         children=[]
                     )
@@ -44,7 +44,7 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         Input('live-update-timer', 'n_intervals')
 )
 def update_live_ui(n):
-    results = db.query_select('SELECT * FROM live_matches ORDER BY last_updated DESC')
+    results = db.select("SELECT * FROM live_matches WHERE status <> 'fetched_opendota' ORDER BY last_updated DESC")
     if not results:
         return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")
     columns = [
@@ -66,17 +66,14 @@ def create_live_match_card(row):
     game_time = convert_duration_format(row['game_time'])
     league = row['league_name']
     is_unknown_League = (league == 'Unknown League')
-    start_time = row['start_date'].astimezone(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')
+    start_time = row['start_date']
     return dmc.Paper(
         withBorder=True,
         shadow='sm',
         p='md',
         radius='md',
-        # A subtle hover effect makes it feel like an interactive app
         style={"transition": "transform 0.2s ease"},
-        # className="match-card-hover",
         children=[
-            # 1. HEADER: League & Match Result
             dmc.Group(
                 justify="space-between",
                 mb="md",
@@ -91,16 +88,14 @@ def create_live_match_card(row):
                 ]
             ),
             
-            # 2. BODY: The "VS" Matchup
             dmc.Group(
                 justify="center", 
                 gap="xl",         
                 children=[
-                    # Radiant Side - Fixed width ensures symmetry
                     dmc.Stack(
                         align="center", 
                         gap=0, 
-                        w=150, # <--- Add this
+                        w=150, 
                         children=[
                             dmc.Image(
                                 src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
@@ -110,29 +105,25 @@ def create_live_match_card(row):
                         ]
                     ),
                     
-                    # The "VS" Text
                     dmc.Text("VS", fw=900, size="lg", c="dimmed"),
                     
-                    # Dire Side - Same fixed width
                     dmc.Stack(
                         align="center", 
                         gap=0, 
-                        w=150, # <--- Add this
+                        w=150, 
                         children=[
                             dmc.Image(
                                 src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
                                 w=50, h=50, fit="contain"
                             ),
-                            dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
+                            dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), 
                         ]
                     )
                 ]
             ),
             
-            # Divider to separate stats
             dmc.Divider(variant="dashed", my="sm"),
             
-            # 3. FOOTER: Match Metadata
             dmc.Group(
                 justify="space-between",
                 children=[
