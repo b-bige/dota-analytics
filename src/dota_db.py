@@ -780,7 +780,7 @@ class DotaDB:
                 )
             storage['match_details'] = {
                 'id': mid, 'tournamentId': result.get('tournament_id'), 'tournamentRound': result.get('tournament_round'),
-                'leagueId': result['leagueid'], 'radiantTeamId': result['radiant_team_id'], 'direTeamId': result['dire_team_id'],
+                'leagueId': result['leagueid'], 'radiantTeamId': result.get('radiant_team_id'), 'direTeamId': result.get('dire_team_id'),
                 'seriesId': result['series_id'], 'clusterId': result['cluster'], 'didRadiantWin': result['radiant_win'],
                 'startDateTime': result['start_time'], 'endDateTime': result['start_time'] + result['duration'], 'durationSeconds': result['duration'],
                 'firstBloodTime': result['first_blood_time'], 'towerStatusRadiant': result['tower_status_radiant'], 'towerStatusDire': result['tower_status_dire'],

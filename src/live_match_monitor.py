@@ -87,23 +87,22 @@ class LiveMatchMonitor:
         pending_ids = [r[0] for r in self.db.select(query)]
         for mid in active_ids:
             try:
-                self.db.fetch_match_opendota(self.httpx_client, mid)
-                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
-                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
-                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES (%s)', params=(mid, ))
-                self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
+                self.insert_update_processed_match(mid)
                 logging.info(f'Saved finished match ID {mid} into database')
             except:
                 self.db.request_parse_opendota(self.httpx_client, mid)
                 self.db.query_execute("UPDATE live_matches SET status = 'pending_parse' WHERE match_id = %s", params=(mid, ))
         for mid in pending_ids:
             if self.db.is_match_parsed_opendota(self.httpx_client, mid):
-                self.db.fetch_match_opendota(self.httpx_client, mid)
-                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
-                self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
-                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES (%s)', params=(mid, ))
-                self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
+                self.insert_update_processed_match(mid)
                 logging.info(f'Saved finished match ID {mid} into database')
+
+    def insert_update_processed_match(self, match_id):
+        self.db.fetch_match_opendota(self.httpx_client, match_id)
+        self.db.query_execute('INSERT INTO archive_live_match_ids VALUES (%s)', params=(match_id, ))
+        self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(match_id, ))
+        self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
+        self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
 
     def get_league_details(self, league_id):
         """Returns league name. Fetches from API and saves the details after to the db."""
