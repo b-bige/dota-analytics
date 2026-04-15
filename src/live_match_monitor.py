@@ -90,7 +90,7 @@ class LiveMatchMonitor:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
                 self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
                 self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
-                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
+                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES (%s)', params=(mid, ))
                 self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
             except:
@@ -101,7 +101,7 @@ class LiveMatchMonitor:
                 self.db.fetch_match_opendota(self.httpx_client, mid)
                 self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
                 self.db.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
-                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES %s', params=(mid, ))
+                self.db.query_execute('INSERT INTO archive_live_match_ids VALUES (%s)', params=(mid, ))
                 self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(mid, ))
                 logging.info(f'Saved finished match ID {mid} into database')
 
