@@ -83,19 +83,30 @@ class LiveMatchMonitor:
         SELECT match_id FROM live_matches WHERE (last_updated < NOW() - INTERVAL '10 minutes') AND is_finished AND status = 'active'
         """
         active_ids = [r[0] for r in self.db.select(query)]  
-        query = "SELECT match_id FROM live_matches WHERE status = 'pending_parse'"
-        pending_ids = [r[0] for r in self.db.select(query)]
+        query = "SELECT match_id, job_id FROM live_matches WHERE status = 'pending_parse'"
+        pending = self.db.select_to_df(query, columns=['match_id', 'job_id'])
         for mid in active_ids:
             try:
                 self.insert_update_processed_match(mid)
                 logging.info(f'Saved finished match ID {mid} into database')
             except:
-                self.db.request_parse_opendota(self.httpx_client, mid)
-                self.db.query_execute("UPDATE live_matches SET status = 'pending_parse' WHERE match_id = %s", params=(mid, ))
-        for mid in pending_ids:
-            if self.db.is_match_parsed_opendota(self.httpx_client, mid):
-                self.insert_update_processed_match(mid)
-                logging.info(f'Saved finished match ID {mid} into database')
+                job_id = self.db.request_parse_opendota(self.httpx_client, mid)
+                self.db.query_execute(
+                    "UPDATE live_matches SET status = 'pending_parse', job_id = %s WHERE match_id = %s", 
+                    params=(job_id, mid))
+        for idx, row in pending.iterrows():
+            mid = int(row['match_id'])
+            try:
+                if self.db.is_match_parsed_opendota(self.httpx_client, mid):
+                    self.insert_update_processed_match(mid)
+                    logging.info(f'Saved finished match ID {mid} into database')
+            except Exception as e:
+                self.db.query_execute(
+                    "UPDATE live_matches SET status = 'failed_parse' WHERE match_id = %s",
+                    params=(mid, )
+                )
+                logging.error(f'Failed to fetch parsed data for match ID {mid}')
+
 
     def insert_update_processed_match(self, match_id):
         self.db.fetch_match_opendota(self.httpx_client, match_id)

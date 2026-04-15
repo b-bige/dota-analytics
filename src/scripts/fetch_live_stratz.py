@@ -11,7 +11,7 @@ listener = setup_logger(logfile_path=f'{str(PROJECT_ROOT)}/logs/daily-stratz-fet
 
 def main():
     db = DotaDB()
-    fetched_ids = [r[0] for r in db.select("SELECT match_id FROM live_matches WHERE status = 'fetched_opendota'")]
+    fetched_ids = [r[0] for r in db.select("SELECT match_id FROM live_matches WHERE status = 'fetched_opendota' OR status = 'failed_parse'")]
     with httpx.Client(headers=db.stratz_headers) as client:
         for mid in fetched_ids:    
             is_saved = db.try_fetch_stratz_match(mid)

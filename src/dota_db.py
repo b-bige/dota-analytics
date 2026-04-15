@@ -13,6 +13,12 @@ from tenacity import retry, wait_exponential, retry_if_exception_type
 class DotaDB:
     def __init__(self, schema: str='public', local: bool = False):
         self.set_local_or_remote(schema=schema, local=local)
+        query = 'SELECT * FROM hero_details'
+        self.heroes = self.select_to_df(query, table='hero_details') ##TODO
+        query = 'SELECT * FROM item_details_opendota' 
+        self.items = self.select_to_df(query, table='item_details_opendota') ##TODO
+        query = 'SELECT * FROM npcs'
+        self.npcs = self.select_to_df(query, table='npcs') ##TODO
 
     def set_local_or_remote(self, schema:str='public', local=False):
         load_dotenv()
@@ -754,13 +760,6 @@ class DotaDB:
                 "8": "WISDOM",
                 "9": "SHIELD"
             }
-            query = 'SELECT * FROM hero_details'
-            heroes = self.select_to_df(query, table='hero_details') ##TODO
-            query = 'SELECT * FROM item_details_opendota' 
-            items = self.select_to_df(query, table='item_details_opendota') ##TODO
-            query = 'SELECT * FROM npcs'
-            npcs = self.select_to_df(query, table='npcs') ##TODO
-            mid = result['match_id']
             mid = result['match_id']
             table_names = [
                 'match_details', 'match_death_events', 'match_pick_bans', 'match_tower_deaths', 
@@ -791,14 +790,14 @@ class DotaDB:
             for obj in result['objectives']:
                 if obj['type'] == 'building_kill':
                     try:
-                        attacker = heroes[heroes['name'] == obj['unit']].get('id').iloc[0]
+                        attacker = self.heroes[self.heroes['name'] == obj['unit']].get('id').iloc[0]
                     except:
                         attacker = 'non-hero'
                     storage['match_tower_deaths'].append(
                         {
                             'match_id': mid,
                             'time': obj['time'],
-                            'npcId': npcs[npcs['name'] == obj['key']].get('id').iloc[0],
+                            'npcId': self.npcs[self.npcs['name'] == obj['key']].get('id').iloc[0],
                             'isRadiant': 'goodguys' in obj['key'],
                             'attacker': attacker
                         }
@@ -807,7 +806,7 @@ class DotaDB:
                 hero_id = p['hero_id']
                 for kill in p['kills_log']:
                     try: 
-                        killed_id = int(heroes[heroes['name'] == kill['key']].get('id').iloc[0])
+                        killed_id = int(self.heroes[self.heroes['name'] == kill['key']].get('id').iloc[0])
                     except:
                         killed_id = -1
                     storage['match_death_events'].append(
@@ -849,7 +848,7 @@ class DotaDB:
                             'match_id': mid,
                             'hero_id': hero_id,
                             'time': pur['time'],
-                            'itemId': items[items['shortName'] == pur['key']].get('id').iloc[0]
+                            'itemId': self.items[self.items['shortName'] == pur['key']].get('id').iloc[0]
                         }
                     )
                 for rune in p['runes_log']:
