@@ -706,7 +706,7 @@ class DotaDB:
             if key in renames:
                 df = df.rename(columns=renames[key])
             table_name = table_map[key]
-            self.insert_df_into_table(df, table_name)
+            self.insert_df_into_table(df, table_name, conflict_cols=['id'])
             self.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')
             self.query_execute('REFRESH MATERIALIZED VIEW hero_winrate_stats')
             logging.info(f"Bulk inserted {len(df)} rows into {table_name}")
