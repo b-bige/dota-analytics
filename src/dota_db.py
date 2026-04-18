@@ -228,7 +228,6 @@ class DotaDB:
             }
         """
         match = self.fetch_stratz(client, query, variables={'id': match_id})['data']['match']
-        print(match)
         if not match:
             return False
         parsed_timestamp = match.get('parsedDateTime', None)
@@ -681,16 +680,8 @@ class DotaDB:
     def _flush_storage(self, storage, table_map):
         for key, data_list in storage.items():
             if not data_list: 
-                continue
-                
+                continue               
             df = pd.DataFrame(data_list)
-            if key == 'details':
-                match_ids = list(df['id'])
-                current_ids = [cid[0] for cid in self.select('SELECT id FROM match_details')]
-                for mid in match_ids.copy():
-                    if mid in current_ids:
-                        df = df[df['id'] != mid]
-
             renames = {
                 'leads': {'radiantNetworthLeads': 'radiant_networth_leads', 'radiantExperienceLeads': 'radiant_experience_leads'},
                 'kills': {'radiantKills': 'radiant_kills', 'direKills': 'dire_kills'},
