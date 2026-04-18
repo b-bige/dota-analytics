@@ -218,7 +218,7 @@ class DotaDB:
             raise KeyError(f"No data in result, probably rate limit exceeded: {result}")
         return result
     
-    def try_fetch_stratz_match(self, match_id):
+    def try_fetch_stratz_match(self, client, match_id):
         query = """
             query($id: Long!) {
                 match(id: $id) {
@@ -227,8 +227,7 @@ class DotaDB:
                 }
             }
         """
-        with httpx.Client(headers=self.stratz_headers) as client:
-            match = self.fetch_stratz(client, query, variables={'id': match_id})['data']['match']
+        match = self.fetch_stratz(client, query, variables={'id': match_id})['data']['match']
         print(match)
         if not match:
             return False
@@ -237,6 +236,7 @@ class DotaDB:
             return False
         is_saved = self.fetch_stratz_matches([match_id])
         if is_saved:
+            logging.info(f'Successfully fetched data from stratz for ID {match_id}')
             return is_saved
         else:
             logging.error(f'Failed to fetch match details from stratz for ID {match_id}')
