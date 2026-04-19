@@ -53,4 +53,6 @@ JOIN match_players mp2
 GROUP BY 1, 2
 HAVING COUNT(*) >= 20;
 
-SELECT * FROM current_player_ratings;
+SELECT "gameVersionId", COUNT(*) FROM match_details GROUP BY "gameVersionId";
+
+SELECT id FROM patches ORDER BY "asOfDateTime" DESC LIMIT 1;

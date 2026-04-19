@@ -44,21 +44,13 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         Input('live-update-timer', 'n_intervals')
 )
 def update_live_ui(n):
-    results = db.select("SELECT * FROM live_matches WHERE status <> 'fetched_opendota' AND status <> 'failed_parse' ORDER BY last_updated DESC")
-    if not results:
+    results = db.select_to_df(
+        "SELECT * FROM live_matches WHERE status <> 'fetched_opendota' AND status <> 'failed_parse' ORDER BY last_updated DESC",
+        table='live_matches'    
+    )
+    if results.empty:
         return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")
-    columns = [
-        'match_id', 'league_id', 'league_name', 'start_date',
-        'radiant_id', 'dire_id',
-        'radiant_name', 'dire_name',
-        'radiant_logo', 'dire_logo',
-        'radiant_score', 'dire_score', 
-        'game_time', 'radiant_lead',
-        'last_updated', 'is_finished',
-        'rad_draft', 'dire_draft', 'rad_rating', 'dire_rating'
-    ]
-    matches = [dict(zip(columns, row)) for row in results]
-    return [create_live_match_card(row) for row in matches]
+    return [create_live_match_card(row) for _, row in results.iterrows()]
 
 def create_live_match_card(row):
     radiant_lead = row['radiant_lead']
@@ -67,9 +59,11 @@ def create_live_match_card(row):
     game_time = convert_duration_format(row['game_time'])
     league = row['league_name']
     is_unknown_League = (league == 'Unknown League')
-    start_time = row['start_date'].astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S")
-    rad_rating = row.get('rad_rating', None)
-    dire_rating = row.get('dire_rating', None)
+    start_time = row['start_date_time'].astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S")
+    radiant_draft_score = round(row.get('radiant_draft_score'), 2)
+    dire_draft_score = round(row.get('dire_draft_score'), 2)
+    rad_rating = row.get('avg_radiant_rating', None)
+    dire_rating = row.get('avg_dire_rating', None)
     if rad_rating:
         rad_rating = round(rad_rating, 2)
     else:
@@ -124,7 +118,8 @@ def create_live_match_card(row):
                                     ]
                                 ),
                             dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
-                            dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed")
+                            dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
+                            dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed")
                         ]
                     ),
                     
@@ -151,7 +146,8 @@ def create_live_match_card(row):
                                 ]
                             ),
                             dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), 
-                            dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed")
+                            dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
+                            dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed")
                         ]
                     )
                 ]

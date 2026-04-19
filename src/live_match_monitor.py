@@ -12,6 +12,8 @@ sys.path.append(os.path.abspath('./src/logger'))
 sys.path.append(os.path.abspath('./src/dashboard'))
 
 import logging
+from basic_logger import setup_logger
+listener = setup_logger(logfile_path='logs/live-match-monitor.log')
 
 from dota_db import DotaDB
 
@@ -59,7 +61,6 @@ class LiveMatchMonitor:
             avg_dire_rating     = None
 
             draft_complete = self.db.draft_is_complete(m)
-
             # ── Draft strength ────────────────────────────────────────────────
             if m_id not in scored_ids and draft_complete:
                 try:

@@ -11,13 +11,15 @@ import logging
 from ratelimit import limits, sleep_and_retry
 from tenacity import retry, wait_exponential, retry_if_exception_type
 from openskill.models import PlackettLuce, PlackettLuceRating
+from datetime import datetime
 
 class DotaDB:
     def __init__(self, schema: str='public', local: bool = False):
         self.set_local_or_remote(schema=schema, local=local)
-        self.load_draft_cache()
         self._openskill_model = PlackettLuce()
         self._openskill_ratings: dict[int, PlackettLuceRating] = {}
+        self.load_draft_cache(self._ignore_cache)
+        self.load_rating_cache(self._ignore_cache)
         query = 'SELECT * FROM hero_details'
         self.heroes = self.select_to_df(query, table='hero_details') ##TODO
         query = 'SELECT * FROM item_details_opendota' 
@@ -45,6 +47,7 @@ class DotaDB:
             "Authorization": f"Bearer {self.stratz_api_key}"
         }
         self.opendota_url = 'https://api.opendota.com/api'
+        self._ignore_cache = os.getenv("IGNORE_CACHE")
 
     def set_schema(self, schema: str='public'):
         user = os.getenv("DB_USER")
@@ -54,11 +57,16 @@ class DotaDB:
         dbname = os.getenv("DB_NAME")
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
 
-    def load_rating_cache(self):
+    def get_current_patch(self):
+        return self.select('SELECT id FROM patches ORDER BY "asOfDateTime" DESC LIMIT 1')[0]
+
+    def load_rating_cache(self, ignore_cache):
         """
         Load all player ratings into memory.
         Call once on startup and after bulk rating updates.
         """
+        if ignore_cache:
+            return None
         logging.info("Loading player rating cache...")
         rows = self.select('SELECT account_id, mu, sigma, ordinal FROM current_player_ratings')
         self._rating_cache = {
@@ -155,11 +163,13 @@ class DotaDB:
         ''', params=[(pid, mu, sigma, ord_) for mu, sigma, ord_, pid in updated])
         logging.info(f"Updated ratings for {len(updated)} players from match {match_id}.")
 
-    def load_draft_cache(self):
+    def load_draft_cache(self, ignore_cache):
         """
         Precompute hero winrates, synergy and counter tables into memory.
         Call once on startup and periodically to refresh.
         """
+        if ignore_cache:
+            return None
         logging.info("Loading draft cache...")
 
         # Hero win rates per patch
@@ -984,6 +994,12 @@ class DotaDB:
         except Exception as e:
             logging.error(f'Error with response: {e}')
             return False
+        
+    def get_match_game_version(self, start_timestamp):
+        start_datetime = datetime.fromtimestamp(start_timestamp)
+        query = 'SELECT id FROM patches WHERE "asOfDateTime" < %s LIMIT 1'
+        game_version = self.select(query, params=(start_datetime, ))[0]
+        return game_version
     
     def fetch_match_opendota(self, client: httpx.Client, match_id):
         #TODO: refactor and optimize
@@ -1020,15 +1036,20 @@ class DotaDB:
                         'isRadiant': mpb['team'] == 0
                     }
                 )
+            start_time = result['start_time']
+            game_version = self.get_match_game_version(start_time)
+            avg_rad_rating = self.get_avg_team_ordinal(result['players'], team=0)
+            avg_dire_rating = self.get_avg_team_ordinal(result['players'], team=1)
             storage['match_details'] = {
                 'id': mid, 'tournamentId': result.get('tournament_id'), 'tournamentRound': result.get('tournament_round'),
                 'leagueId': result['leagueid'], 'radiantTeamId': result.get('radiant_team_id'), 'direTeamId': result.get('dire_team_id'),
                 'seriesId': result['series_id'], 'clusterId': result['cluster'], 'didRadiantWin': result['radiant_win'],
-                'startDateTime': result['start_time'], 'endDateTime': result['start_time'] + result['duration'], 'durationSeconds': result['duration'],
+                'startDateTime': start_time, 'endDateTime': result['start_time'] + result['duration'], 'durationSeconds': result['duration'],
                 'firstBloodTime': result['first_blood_time'], 'towerStatusRadiant': result['tower_status_radiant'], 'towerStatusDire': result['tower_status_dire'],
                 'barracksStatusRadiant': result['barracks_status_radiant'], 'barracksStatusDire': result['barracks_status_dire'], 'rank': result.get('rank_tier'),
                 'actualRank': result.get('rank_tier_actual'), 'averageRank': result.get('average_rank'), 'averageImp': result.get('average_imp'),
-                'radiant_score': result['radiant_score'], 'dire_score': result['dire_score']
+                'radiant_score': result['radiant_score'], 'dire_score': result['dire_score'], 'gameVersionId': game_version,
+                'avg_radiant_rating': avg_rad_rating, 'avg_dire_rating': avg_dire_rating
             }
             for obj in result['objectives']:
                 if obj['type'] == 'building_kill':
@@ -1131,6 +1152,7 @@ class DotaDB:
                 else:
                     self.insert_df_into_table(pd.DataFrame(data), table_name=table)
             logging.info(f"Successfully fetched and stored data for match ID {match_id}")
+            self.update_ratings_from_match(match_id)
             return storage
 
         except Exception as e:
