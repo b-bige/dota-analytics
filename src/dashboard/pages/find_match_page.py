@@ -4,6 +4,8 @@ import dash_mantine_components as dmc
 
 from math import floor
 from urllib.parse import parse_qs
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import os
 import sys
@@ -129,6 +131,7 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
 def create_match_element(row: dict):
     result_color = COLORS['radiant'] if row['radiant_win'] else COLORS['dire']
     row['duration'] = convert_duration_format(row['duration'])
+    start_date = row['start_date'].astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S")
     league = row.get('league_name', None)
     rad_rating = row.get('rad_rating', None)
     dire_rating = row.get('dire_rating', None)
@@ -168,7 +171,21 @@ def create_match_element(row: dict):
                         gap="xl",         
                         children=[
                             dmc.Stack(align="center", gap=0, children=[
-                                dmc.Image(src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
+                                dmc.Paper(
+                                    shadow="xs",
+                                    radius="md",
+                                    p=5,
+                                    withBorder=True,
+                                    bg="white", # Forces a background so transparent logos are visible
+                                    children=[
+                                        dmc.Image(
+                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
+                                            fallbackSrc='/assets/no_image.svg',
+                                            w=50, h=50, 
+                                            fit="contain"
+                                        )
+                                    ]
+                                ),
                                 dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm") if row['radiant_name'] else
                                 dmc.Text(f'Radiant ID: {row['radiant_team_id']}'),
                                 dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed")
@@ -177,7 +194,21 @@ def create_match_element(row: dict):
                             dmc.Text("VS", fw=900, size="lg", c="dimmed"),
                             
                             dmc.Stack(align="center", gap=0, children=[
-                                dmc.Image(src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', w=50, h=50, fit="contain"),
+                                dmc.Paper(
+                                    shadow="xs",
+                                    radius="md",
+                                    p=5,
+                                    withBorder=True,
+                                    bg="white", # Forces a background so transparent logos are visible
+                                    children=[
+                                        dmc.Image(
+                                            src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
+                                            fallbackSrc='/assets/no_image.svg',
+                                            w=50, h=50, 
+                                            fit="contain"
+                                        )
+                                    ]
+                                ),
                                 dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm") if row['dire_name'] else
                                 dmc.Text(f'Dire ID: {row['dire_team_id']}'),
                                 dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed")
@@ -190,7 +221,7 @@ def create_match_element(row: dict):
                     dmc.Group(
                         justify="space-between",
                         children=[
-                            dmc.Text(f"📅 {row['start_date']}", size="xs", c="dimmed"),
+                            dmc.Text(f"📅 {start_date}", size="xs", c="dimmed"),
                             dmc.Text(f"⏱️ {row['duration']}", size="xs", c="dimmed"),
                             dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
                         ]

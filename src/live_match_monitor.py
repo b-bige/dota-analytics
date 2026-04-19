@@ -4,9 +4,12 @@ import httpx
 import os
 import sys
 from datetime import datetime
+import pandas as pd
+import numpy as np
 
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
+sys.path.append(os.path.abspath('./src/dashboard'))
 
 import logging
 
@@ -22,7 +25,16 @@ class LiveMatchMonitor:
         all_live = self.db.fetch_opendota(self.httpx_client, 'live')
         current_api_ids = []
         leagues = {row[0]: row[1] for row in self.db.select('SELECT id, "displayName" FROM league_details')}
-        archived_ids = [r[0] for r in self.db.select('SELECT match_id FROM archive_live_match_ids')]
+        archived_ids = {r[0] for r in self.db.select('SELECT match_id FROM archive_live_match_ids')}
+
+        scored_ids = {r[0] for r in self.db.select(
+            'SELECT match_id FROM live_matches WHERE radiant_draft_score IS NOT NULL'
+        )}
+
+        rated_ids = {r[0] for r in self.db.select(
+            'SELECT match_id FROM live_matches WHERE avg_radiant_rating IS NOT NULL'
+        )}
+
         for m in all_live:
             league_id = m.get('league_id') 
             if league_id == 0 or not league_id: continue
@@ -40,32 +52,75 @@ class LiveMatchMonitor:
             d_id = int(m.get('team_id_dire')) or 0
             radiant_logo = self.get_team_logo(r_id, m.get('team_name_radiant'))
             dire_logo = self.get_team_logo(d_id, m.get('team_name_dire'))
+
+            radiant_draft_score = None
+            dire_draft_score    = None
+            avg_radiant_rating  = None
+            avg_dire_rating     = None
+
+            draft_complete = self.db.draft_is_complete(m)
+
+            # ── Draft strength ────────────────────────────────────────────────
+            if m_id not in scored_ids and draft_complete:
+                try:
+                    patch = self.db.get_current_patch()
+                    radiant_heroes, dire_heroes = self.db.get_draft(m)
+                    radiant_draft_score = self.db.compute_draft_strength(radiant_heroes, dire_heroes, patch)
+                    dire_draft_score    = self.db.compute_draft_strength(dire_heroes, radiant_heroes, patch)
+                    scored_ids.add(m_id)
+                    logging.info(f"Draft scores for match {m_id} — "
+                                f"Radiant: {radiant_draft_score:.3f}, Dire: {dire_draft_score:.3f}")
+                except Exception as e:
+                    logging.warning(f"Failed to calculate draft strength for match {m_id}: {e}")
+
+            # ── Player ratings ────────────────────────────────────────────────
+            if m_id not in rated_ids and draft_complete:
+                try:
+                    players = m.get('players', [])
+                    avg_radiant_rating = self.db.get_avg_team_ordinal(players, team=0)
+                    avg_dire_rating    = self.db.get_avg_team_ordinal(players, team=1)
+                    if avg_radiant_rating is not None and avg_dire_rating is not None:
+                        rated_ids.add(m_id)
+                        logging.info(f"Ratings for match {m_id} — "
+                                    f"Radiant: {avg_radiant_rating:.1f}, Dire: {avg_dire_rating:.1f}")
+                except Exception as e:
+                    logging.warning(f"Failed to calculate ratings for match {m_id}: {e}")
+
             query = """
-                INSERT INTO live_matches (match_id, league_id, league_name, 
-                start_date_time, radiant_id, dire_id, 
-                radiant_name, dire_name, 
-                radiant_logo, dire_logo, radiant_score, dire_score, 
-                game_time, radiant_lead, is_finished, status, last_updated)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO live_matches (match_id, league_id, league_name,
+                start_date_time, radiant_id, dire_id,
+                radiant_name, dire_name,
+                radiant_logo, dire_logo, radiant_score, dire_score,
+                game_time, radiant_lead, is_finished, status,
+                radiant_draft_score, dire_draft_score,
+                avg_radiant_rating, avg_dire_rating,
+                last_updated)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (match_id) DO UPDATE SET
-                    league_name = EXCLUDED.league_name,
-                    radiant_score = EXCLUDED.radiant_score,
-                    radiant_logo = EXCLUDED.radiant_logo,
-                    dire_logo = EXCLUDED.dire_logo,
-                    dire_score = EXCLUDED.dire_score,
-                    game_time = EXCLUDED.game_time,
-                    radiant_lead = EXCLUDED.radiant_lead,
-                    is_finished = EXCLUDED.is_finished,
-                    last_updated = CURRENT_TIMESTAMP
+                    league_name        = EXCLUDED.league_name,
+                    radiant_score      = EXCLUDED.radiant_score,
+                    radiant_logo       = EXCLUDED.radiant_logo,
+                    dire_logo          = EXCLUDED.dire_logo,
+                    dire_score         = EXCLUDED.dire_score,
+                    game_time          = EXCLUDED.game_time,
+                    radiant_lead       = EXCLUDED.radiant_lead,
+                    is_finished        = EXCLUDED.is_finished,
+                    last_updated       = CURRENT_TIMESTAMP,
+                    radiant_draft_score = COALESCE(live_matches.radiant_draft_score, EXCLUDED.radiant_draft_score),
+                    dire_draft_score    = COALESCE(live_matches.dire_draft_score,    EXCLUDED.dire_draft_score),
+                    avg_radiant_rating  = COALESCE(live_matches.avg_radiant_rating,  EXCLUDED.avg_radiant_rating),
+                    avg_dire_rating     = COALESCE(live_matches.avg_dire_rating,      EXCLUDED.avg_dire_rating)
                 WHERE live_matches.game_time IS DISTINCT FROM EXCLUDED.game_time;
             """
             params = (
-                m_id, league_id, league_name, start_time, 
+                m_id, league_id, league_name, start_time,
                 m.get('team_id_radiant'), m.get('team_id_dire'),
                 m.get('team_name_radiant', 'Radiant'), m.get('team_name_dire', 'Dire'),
-                radiant_logo, dire_logo, m.get('radiant_score', 0), 
+                radiant_logo, dire_logo, m.get('radiant_score', 0),
                 m.get('dire_score', 0), m.get('game_time', 0), m.get('radiant_lead', 0),
-                is_finished, 'active'
+                is_finished, 'active',
+                radiant_draft_score, dire_draft_score,
+                avg_radiant_rating, avg_dire_rating
             )
             self.db.query_execute(query, params=params)
 
@@ -107,9 +162,11 @@ class LiveMatchMonitor:
                 )
                 logging.error(f'Failed to fetch parsed data for match ID {mid}')
 
-
     def insert_update_processed_match(self, match_id):
-        self.db.fetch_match_opendota(self.httpx_client, match_id)
+        storage = self.db.fetch_match_opendota(self.httpx_client, match_id)
+        players = pd.DataFrame(storage['match_players'])
+        rad = players[players['isRadiant'] == True]
+        dire = players[players['isRadiant'] == False]
         self.db.query_execute('INSERT INTO archive_live_match_ids VALUES (%s)', params=(match_id, ))
         self.db.query_execute("UPDATE live_matches SET status = 'fetched_opendota' WHERE match_id = %s", params=(match_id, ))
         self.db.query_execute('REFRESH MATERIALIZED VIEW hero_pick_ban_stats;')

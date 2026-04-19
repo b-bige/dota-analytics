@@ -54,7 +54,8 @@ def update_live_ui(n):
         'radiant_logo', 'dire_logo',
         'radiant_score', 'dire_score', 
         'game_time', 'radiant_lead',
-        'last_updated', 'is_finished'
+        'last_updated', 'is_finished',
+        'rad_draft', 'dire_draft', 'rad_rating', 'dire_rating'
     ]
     matches = [dict(zip(columns, row)) for row in results]
     return [create_live_match_card(row) for row in matches]
@@ -66,7 +67,17 @@ def create_live_match_card(row):
     game_time = convert_duration_format(row['game_time'])
     league = row['league_name']
     is_unknown_League = (league == 'Unknown League')
-    start_time = row['start_date']
+    start_time = row['start_date'].astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S")
+    rad_rating = row.get('rad_rating', None)
+    dire_rating = row.get('dire_rating', None)
+    if rad_rating:
+        rad_rating = round(rad_rating, 2)
+    else:
+        rad_rating = '-'
+    if dire_rating:
+        dire_rating = round(dire_rating, 2)
+    else:
+        dire_rating = '-'
     return dmc.Paper(
         withBorder=True,
         shadow='sm',
@@ -97,11 +108,23 @@ def create_live_match_card(row):
                         gap=0, 
                         w=150, 
                         children=[
-                            dmc.Image(
-                                src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
-                                w=50, h=50, fit="contain"
-                            ),
+                            dmc.Paper(
+                                    shadow="xs",
+                                    radius="md",
+                                    p=5,
+                                    withBorder=True,
+                                    bg="white", # Forces a background so transparent logos are visible
+                                    children=[
+                                        dmc.Image(
+                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
+                                            fallbackSrc='/assets/no_image.svg',
+                                            w=50, h=50, 
+                                            fit="contain"
+                                        )
+                                    ]
+                                ),
                             dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
+                            dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed")
                         ]
                     ),
                     
@@ -112,11 +135,23 @@ def create_live_match_card(row):
                         gap=0, 
                         w=150, 
                         children=[
-                            dmc.Image(
-                                src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
-                                w=50, h=50, fit="contain"
+                            dmc.Paper(
+                                shadow="xs",
+                                radius="md",
+                                p=5,
+                                withBorder=True,
+                                bg="white", # Forces a background so transparent logos are visible
+                                children=[
+                                    dmc.Image(
+                                        src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
+                                        fallbackSrc='/assets/no_image.svg',
+                                        w=50, h=50, 
+                                        fit="contain"
+                                    )
+                                ]
                             ),
                             dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), 
+                            dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed")
                         ]
                     )
                 ]
