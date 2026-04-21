@@ -26,6 +26,7 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
                 h=600, 
                 offsetScrollbars=True,
                 children=[
+                    dmc.Text('Test worked'),
                     dmc.SimpleGrid(
                         id='live-match-container', 
                         cols=2,        
