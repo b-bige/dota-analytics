@@ -136,8 +136,8 @@ def create_match_element(row: dict):
     league = row.get('league_name', None)
     rad_rating = row.get('rad_rating', None)
     dire_rating = row.get('dire_rating', None)
-    radiant_draft_score = row.get('radiant_draft_score', None)
-    dire_draft_score = row.get('dire_draft_score', None)
+    radiant_draft_score = round(row.get('radiant_draft_score', None), 2)
+    dire_draft_score = round(row.get('dire_draft_score', None), 2)
     if rad_rating:
         rad_rating = round(rad_rating, 2)
     else:
@@ -192,7 +192,7 @@ def create_match_element(row: dict):
                                 dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm") if row['radiant_name'] else
                                 dmc.Text(f'Radiant ID: {row['radiant_team_id']}'),
                                 dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
-                                # dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed")
+                                dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed")
                             ]),
                             
                             dmc.Text("VS", fw=900, size="lg", c="dimmed"),
@@ -216,7 +216,7 @@ def create_match_element(row: dict):
                                 dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm") if row['dire_name'] else
                                 dmc.Text(f'Dire ID: {row['dire_team_id']}'),
                                 dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
-                                # dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed")
+                                dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed")
                             ])
                         ]
                     ),

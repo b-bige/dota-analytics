@@ -48,5 +48,3 @@ JOIN match_players mp2
     AND mp1."isRadiant" != mp2."isRadiant"
 GROUP BY 1, 2
 HAVING COUNT(*) >= 20;
-
-SELECT avg_radiant_rating, avg_dire_rating FROM match_details WHERE avg_dire_rating IS NOT NULL ORDER BY avg_dire_rating DESC;
