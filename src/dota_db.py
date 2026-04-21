@@ -65,7 +65,8 @@ class DotaDB:
         Load all player ratings into memory.
         Call once on startup and after bulk rating updates.
         """
-        if ignore_cache:
+        if ignore_cache == 1:
+            logging.warning(f'Environment variable set to ignore cache')
             return None
         logging.info("Loading player rating cache...")
         rows = self.select('SELECT account_id, mu, sigma, ordinal FROM current_player_ratings')
@@ -96,12 +97,15 @@ class DotaDB:
             logging.debug(f"New player {account_id} initialised with default rating.")
         return self._openskill_ratings[account_id]
     
-    def get_avg_team_ordinal(self, players: list[dict], team: int) -> float | None:
+    def get_avg_team_ordinal(self, players: list[dict], team: int, live=True) -> float | None:
         """
         Returns mean ordinal for a team's players.
         Unknown players get default rating — no exclusions.
         """
-        team_players = [p for p in players if p.get('team') == team]
+        if live:
+            team_players = [p for p in players if p.get('team') == team]
+        else:
+            team_players = [p for p in players if p.get('isRadiant') == (team == 0)]
         if not team_players:
             return None
         ordinals = [
@@ -154,12 +158,13 @@ class DotaDB:
 
         # bulk upsert
         self.query_executemany('''
-            INSERT INTO current_player_ratings (account_id, mu, sigma, ordinal)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO current_player_ratings (account_id, mu, sigma, ordinal, last_updated)
+            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (account_id) DO UPDATE SET
                 mu      = EXCLUDED.mu,
                 sigma   = EXCLUDED.sigma,
-                ordinal = EXCLUDED.ordinal
+                ordinal = EXCLUDED.ordinal,
+                last_updated = CURRENT_TIMESTAMP
         ''', params=[(pid, mu, sigma, ord_) for mu, sigma, ord_, pid in updated])
         logging.info(f"Updated ratings for {len(updated)} players from match {match_id}.")
 
@@ -168,7 +173,7 @@ class DotaDB:
         Precompute hero winrates, synergy and counter tables into memory.
         Call once on startup and periodically to refresh.
         """
-        if ignore_cache:
+        if ignore_cache == 1:
             return None
         logging.info("Loading draft cache...")
 
@@ -302,10 +307,14 @@ class DotaDB:
         
         return len(radiant) == 5 and len(dire) == 5
 
-    def get_draft(self, match: dict) -> tuple[list[int], list[int]]:
+    def get_draft(self, match: dict, live=True) -> tuple[list[int], list[int]]:
         players = match.get('players', [])
-        radiant_heroes = [p['hero_id'] for p in players if p.get('team') == 0]
-        dire_heroes    = [p['hero_id'] for p in players if p.get('team') == 1]
+        if live:
+            radiant_heroes = [p['hero_id'] for p in players if p.get('team') == 0]
+            dire_heroes    = [p['hero_id'] for p in players if p.get('team') == 1]
+        else:
+            radiant_heroes = [p['hero_id'] for p in players if p.get('isRadiant') == True]
+            dire_heroes    = [p['hero_id'] for p in players if p.get('isRadiant') == False]
         return radiant_heroes, dire_heroes
 
     def select(self, query, params=None, identifiers=None):
@@ -488,9 +497,11 @@ class DotaDB:
         """
         match = self.fetch_stratz(client, query, variables={'id': match_id})['data']['match']
         if not match:
+            logging.info(f'No match data yet for ID {match_id}')
             return False
         parsed_timestamp = match.get('parsedDateTime', None)
         if not parsed_timestamp:
+            logging.info(f'Match not parsed yet for {match_id}')
             return False
         is_saved = self.fetch_stratz_matches([match_id])
         if is_saved:
@@ -1038,8 +1049,12 @@ class DotaDB:
                 )
             start_time = result['start_time']
             game_version = self.get_match_game_version(start_time)
-            avg_rad_rating = self.get_avg_team_ordinal(result['players'], team=0)
-            avg_dire_rating = self.get_avg_team_ordinal(result['players'], team=1)
+            avg_rad_rating = self.get_avg_team_ordinal(result['players'], team=0, live=False)
+            avg_dire_rating = self.get_avg_team_ordinal(result['players'], team=1, live=False)
+            radiant_heroes, dire_heroes = self.get_draft(result, live=False)
+            patch = self.get_current_patch()
+            radiant_draft_score = self.compute_draft_strength(radiant_heroes, dire_heroes, patch)
+            dire_draft_score    = self.compute_draft_strength(dire_heroes, radiant_heroes, patch)
             storage['match_details'] = {
                 'id': mid, 'tournamentId': result.get('tournament_id'), 'tournamentRound': result.get('tournament_round'),
                 'leagueId': result['leagueid'], 'radiantTeamId': result.get('radiant_team_id'), 'direTeamId': result.get('dire_team_id'),
@@ -1049,9 +1064,10 @@ class DotaDB:
                 'barracksStatusRadiant': result['barracks_status_radiant'], 'barracksStatusDire': result['barracks_status_dire'], 'rank': result.get('rank_tier'),
                 'actualRank': result.get('rank_tier_actual'), 'averageRank': result.get('average_rank'), 'averageImp': result.get('average_imp'),
                 'radiant_score': result['radiant_score'], 'dire_score': result['dire_score'], 'gameVersionId': game_version,
-                'avg_radiant_rating': avg_rad_rating, 'avg_dire_rating': avg_dire_rating
+                'avg_radiant_rating': avg_rad_rating, 'avg_dire_rating': avg_dire_rating,
+                'radiant_draft_score': radiant_draft_score, 'dire_draft_score': dire_draft_score
             }
-            for obj in result['objectives']:
+            for obj in result.get('objectives'):
                 if obj['type'] == 'building_kill':
                     try:
                         attacker = self.heroes[self.heroes['name'] == obj['unit']].get('id').iloc[0]
@@ -1068,7 +1084,7 @@ class DotaDB:
                     )
             for p in result['players']:
                 hero_id = p['hero_id']
-                for kill in p['kills_log']:
+                for kill in p.get('kills_log'):
                     try: 
                         killed_id = int(self.heroes[self.heroes['name'] == kill['key']].get('id').iloc[0])
                     except:
@@ -1106,7 +1122,7 @@ class DotaDB:
                         'assists': p['assists']
                     }
                 )
-                for pur in p['purchase_log']:
+                for pur in p.get('purchase_log'):
                     storage['match_purchases'].append(
                         {
                             'match_id': mid,
@@ -1115,7 +1131,7 @@ class DotaDB:
                             'itemId': self.items[self.items['shortName'] == pur['key']].get('id').iloc[0]
                         }
                     )
-                for rune in p['runes_log']:
+                for rune in p.get('runes_log'):
                     storage['match_runes'].append(
                         {
                             'match_id': mid,
@@ -1124,7 +1140,7 @@ class DotaDB:
                             'rune': rune_map[rune['key']]
                         }
                     )
-                for ward in p['obs_log']:
+                for ward in p.get('obs_log'):
                     storage['match_wards'].append(
                         {
                             'match_id': mid,
@@ -1135,7 +1151,7 @@ class DotaDB:
                             'positionY': ward['y']
                         }
                     )
-                for ward in p['sen_log']:
+                for ward in p.get('sen_log'):
                     storage['match_wards'].append(
                         {
                             'match_id': mid,
@@ -1148,7 +1164,7 @@ class DotaDB:
                     )  
             for table, data in storage.items():
                 if table == 'match_details':
-                    self.insert_df_into_table(pd.DataFrame(data, index=[0]), table_name=table)
+                    self.insert_df_into_table(pd.DataFrame(data, index=[0]), table_name=table, conflict_cols=['id'])
                 else:
                     self.insert_df_into_table(pd.DataFrame(data), table_name=table)
             logging.info(f"Successfully fetched and stored data for match ID {match_id}")
@@ -1170,3 +1186,8 @@ class DotaDB:
             return "TIMESTAMP"
         else:
             return "TEXT"
+        
+if __name__ == '__main__': 
+    db = DotaDB()
+    with httpx.Client() as client:
+        db.fetch_match_opendota(client, 8780717096)

@@ -7,7 +7,6 @@ SELECT
 FROM match_pick_bans mpb
 JOIN hero_details hd ON hd.id = mpb."heroId"
 GROUP BY hd."displayName", hd."shortName";
-
 CREATE MATERIALIZED VIEW hero_winrate_stats AS
 SELECT 
     AVG(CAST(mp."isVictory" AS INT)) AS winrate,
@@ -17,7 +16,6 @@ FROM match_players mp
 JOIN hero_details hd ON mp."heroId" = hd.id
 JOIN match_details md ON mp.match_id = md.id
 GROUP BY hd."displayName";
-
 CREATE MATERIALIZED VIEW hero_presence_stats AS
 SELECT
     COUNT(*) AS presence,
@@ -25,7 +23,6 @@ SELECT
 FROM match_pick_bans mpb
 JOIN hero_details hd ON hd.id = mpb."heroId"
 GROUP BY hd."displayName", hd."shortName";
-
 CREATE MATERIALIZED VIEW hero_synergy_stats AS
 SELECT 
     LEAST(mp1."heroId", mp2."heroId")       AS hero1,
@@ -39,7 +36,6 @@ JOIN match_players mp2
     AND mp1."isRadiant" = mp2."isRadiant"
 GROUP BY 1, 2
 HAVING COUNT(*) >= 20;
-
 CREATE MATERIALIZED VIEW hero_counter_stats AS 
 SELECT 
     mp1."heroId"                            AS hero_id,
@@ -53,6 +49,4 @@ JOIN match_players mp2
 GROUP BY 1, 2
 HAVING COUNT(*) >= 20;
 
-SELECT "gameVersionId", COUNT(*) FROM match_details GROUP BY "gameVersionId";
-
-SELECT id FROM patches ORDER BY "asOfDateTime" DESC LIMIT 1;
+SELECT avg_radiant_rating, avg_dire_rating FROM match_details WHERE avg_dire_rating IS NOT NULL ORDER BY avg_dire_rating DESC;

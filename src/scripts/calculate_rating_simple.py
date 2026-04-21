@@ -42,7 +42,7 @@ def main():
     
     log.info("Loading metadata...")
     metadata = db.select_to_df('SELECT * FROM match_details', table='match_details')
-    metadata = metadata.sort_values(by='startDateTimeHuman').reset_index(drop=True)
+    metadata = metadata.sort_values(by='startDateTimeHuman', ascending=True).reset_index(drop=True)
 
     radiant_win_lookup = dict(zip(metadata['id'], metadata['didRadiantWin']))
 
