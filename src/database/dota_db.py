@@ -1,25 +1,18 @@
 import pandas as pd 
-import numpy as np
 import psycopg
 from psycopg.types.json import Jsonb
 from psycopg import sql
 import httpx
-import time
 import os
 from dotenv import load_dotenv
 import logging
 from ratelimit import limits, sleep_and_retry
 from tenacity import retry, wait_exponential, retry_if_exception_type
-from openskill.models import PlackettLuce, PlackettLuceRating
 from datetime import datetime
 
 class DotaDB:
     def __init__(self, schema: str='public', local: bool = False):
         self.set_local_or_remote(schema=schema, local=local)
-        self._openskill_model = PlackettLuce()
-        self._openskill_ratings: dict[int, PlackettLuceRating] = {}
-        self.load_draft_cache(self._ignore_cache)
-        self.load_rating_cache(self._ignore_cache)
         query = 'SELECT * FROM hero_details'
         self.heroes = self.select_to_df(query, table='hero_details') ##TODO
         query = 'SELECT * FROM item_details_opendota' 
@@ -38,7 +31,6 @@ class DotaDB:
         else:
             host = os.getenv("DB_HOST")
             password = os.getenv("DB_PASSWORD")
-        
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
         self.stratz_api_key = os.getenv("API_KEY")
         self.stratz_url = 'https://api.stratz.com/graphql'
@@ -47,7 +39,6 @@ class DotaDB:
             "Authorization": f"Bearer {self.stratz_api_key}"
         }
         self.opendota_url = 'https://api.opendota.com/api'
-        self._ignore_cache = os.getenv("IGNORE_CACHE")
 
     def set_schema(self, schema: str='public'):
         user = os.getenv("DB_USER")
@@ -56,266 +47,6 @@ class DotaDB:
         port = os.getenv("DB_PORT")
         dbname = os.getenv("DB_NAME")
         self.conn_str = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-csearch_path%3D{schema}"
-
-    def get_current_patch(self):
-        return self.select('SELECT id FROM patches ORDER BY "asOfDateTime" DESC LIMIT 1')[0]
-
-    def load_rating_cache(self, ignore_cache):
-        """
-        Load all player ratings into memory.
-        Call once on startup and after bulk rating updates.
-        """
-        if ignore_cache == 1:
-            logging.warning(f'Environment variable set to ignore cache')
-            return None
-        logging.info("Loading player rating cache...")
-        rows = self.select('SELECT account_id, mu, sigma, ordinal FROM current_player_ratings')
-        self._rating_cache = {
-            row[0]: (float(row[1]), float(row[2]), float(row[3]))
-            for row in rows
-        }
-        # also rebuild openskill Rating objects for live updates
-        self._openskill_ratings = {
-            account_id: self._openskill_model.rating(mu=mu, sigma=sigma)
-            for account_id, (mu, sigma, ordinal) in self._rating_cache.items()
-        }
-        logging.info(f"Rating cache loaded — {len(self._rating_cache):,} players.")
-
-    def get_player_rating(self, account_id: int) -> PlackettLuceRating:
-        """
-        Returns the OpenSkill Rating object for a player.
-        If unknown, creates a new default rating and adds to cache.
-        """
-        if account_id not in self._openskill_ratings:
-            new_rating = self._openskill_model.rating()
-            self._openskill_ratings[account_id] = new_rating
-            self._rating_cache[account_id] = (
-                new_rating.mu,
-                new_rating.sigma,
-                new_rating.ordinal()
-            )
-            logging.debug(f"New player {account_id} initialised with default rating.")
-        return self._openskill_ratings[account_id]
-    
-    def get_avg_team_ordinal(self, players: list[dict], team: int, live=True) -> float | None:
-        """
-        Returns mean ordinal for a team's players.
-        Unknown players get default rating — no exclusions.
-        """
-        if live:
-            team_players = [p for p in players if p.get('team') == team]
-        else:
-            team_players = [p for p in players if p.get('isRadiant') == (team == 0)]
-        if not team_players:
-            return None
-        ordinals = [
-            self.get_player_rating(p['account_id']).ordinal()
-            for p in team_players
-            if p.get('account_id')
-        ]
-        return float(np.mean(ordinals)) if ordinals else None
-
-    def update_ratings_from_match(self, match_id: int):
-        """
-        Called when a live match finishes and is parsed.
-        Fetches player stats, updates ratings, persists to DB.
-        """
-        rows = self.select('''
-            SELECT mp."steamAccountId", mp."isRadiant", md."didRadiantWin"
-            FROM match_players mp
-            JOIN match_details md ON md.id = mp.match_id
-            WHERE mp.match_id = %s
-            AND mp."steamAccountId" IS NOT NULL
-        ''', params=(match_id,))
-
-        if not rows:
-            logging.warning(f"No player data found for match {match_id} — skipping rating update.")
-            return
-
-        radiant_win = rows[0][2]
-        radiant_ids = [r[0] for r in rows if r[1] == True]
-        dire_ids    = [r[0] for r in rows if r[1] == False]
-
-        if not radiant_ids or not dire_ids:
-            logging.warning(f"Missing team data for match {match_id} — skipping.")
-            return
-
-        radiant_ratings = [self.get_player_rating(pid) for pid in radiant_ids]
-        dire_ratings    = [self.get_player_rating(pid) for pid in dire_ids]
-
-        # update ratings
-        if radiant_win:
-            new_radiant, new_dire = self._openskill_model.rate([radiant_ratings, dire_ratings])
-        else:
-            new_dire, new_radiant = self._openskill_model.rate([dire_ratings, radiant_ratings])
-
-        # persist to cache and DB
-        updated = []
-        for pid, new_r in zip(radiant_ids + dire_ids, new_radiant + new_dire):
-            self._openskill_ratings[pid] = new_r
-            self._rating_cache[pid] = (new_r.mu, new_r.sigma, new_r.ordinal())
-            updated.append((new_r.mu, new_r.sigma, new_r.ordinal(), pid))
-
-        # bulk upsert
-        self.query_executemany('''
-            INSERT INTO current_player_ratings (account_id, mu, sigma, ordinal, last_updated)
-            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (account_id) DO UPDATE SET
-                mu      = EXCLUDED.mu,
-                sigma   = EXCLUDED.sigma,
-                ordinal = EXCLUDED.ordinal,
-                last_updated = CURRENT_TIMESTAMP
-        ''', params=[(pid, mu, sigma, ord_) for mu, sigma, ord_, pid in updated])
-        logging.info(f"Updated ratings for {len(updated)} players from match {match_id}.")
-
-    def load_draft_cache(self, ignore_cache):
-        """
-        Precompute hero winrates, synergy and counter tables into memory.
-        Call once on startup and periodically to refresh.
-        """
-        if ignore_cache == 1:
-            return None
-        logging.info("Loading draft cache...")
-
-        # Hero win rates per patch
-        hero_wr = self.select_to_df('''
-            SELECT 
-                mp."heroId"                         AS hero_id,
-                md."gameVersionId",
-                AVG(CAST(mp."isVictory" AS INT))    AS winrate,
-                COUNT(*)                            AS games
-            FROM match_players mp
-            JOIN match_details md ON md.id = mp.match_id
-            GROUP BY mp."heroId", md."gameVersionId"
-            HAVING COUNT(*) >= 20
-        ''', columns=['hero_id', 'patch', 'winrate', 'games'])
-        hero_wr['winrate'] = hero_wr['winrate'].astype(float)
-
-        # Hero synergy — same team pair win rates
-        synergy = self.select_to_df('SELECT * FROM hero_synergy_stats', columns=['hero1', 'hero2', 'winrate', 'games'])
-        synergy['winrate'] = synergy['winrate'].astype(float)
-
-        # Hero counters — opposite team pair win rates
-        counters = self.select_to_df('SELECT * FROM hero_counter_stats', columns=['hero_id', 'enemy_id', 'winrate', 'games'])
-        counters['winrate'] = counters['winrate'].astype(float)
-
-        # Convert to dicts for O(1) lookup
-        self._hero_wr_cache = {
-            (row.hero_id, row.patch): row.winrate
-            for row in hero_wr.itertuples()
-        }
-        self._hero_wr_by_hero = {
-            hero_id: grp['winrate'].mean()
-            for hero_id, grp in hero_wr.groupby('hero_id')
-        }
-        self._synergy_cache = {
-            (row.hero1, row.hero2): row.winrate
-            for row in synergy.itertuples()
-        }
-        self._counter_cache = {
-            (row.hero_id, row.enemy_id): row.winrate
-            for row in counters.itertuples()
-        }
-
-        logging.info(f"Draft cache loaded — "
-                f"{len(self._hero_wr_cache)} hero/patch entries, "
-                f"{len(self._synergy_cache)} synergy pairs, "
-                f"{len(self._counter_cache)} counter matchups.")
-        
-    def _hero_winrate(self, hero_id: int, patch: int) -> float:
-        """Patch-specific winrate with fallback to overall hero winrate."""
-        return (
-            self._hero_wr_cache.get((hero_id, patch)) or
-            self._hero_wr_by_hero.get(hero_id) or
-            0.50
-        )
-
-
-    def _synergy_score(self, hero1: int, hero2: int) -> float | None:
-        key = (min(hero1, hero2), max(hero1, hero2))
-        return self._synergy_cache.get(key)
-
-
-    def _counter_score(self, hero_id: int, enemy_id: int) -> float | None:
-        return self._counter_cache.get((hero_id, enemy_id))
-
-
-    def compute_draft_strength(
-        self,
-        team_heroes: list[int],
-        enemy_heroes: list[int],
-        patch: int,
-        weights: tuple[float, float, float] = (0.40, 0.35, 0.25)
-    ) -> float:
-        """
-        Compute draft strength score for a team.
-
-        Args:
-            team_heroes:  list of hero IDs for this team (max 5)
-            enemy_heroes: list of hero IDs for the enemy team (max 5)
-            patch:        current patch as int
-            weights:      (hero_wr, synergy, counter) weights — must sum to 1.0
-
-        Returns:
-            float 0-1, higher = stronger draft
-        """
-        w_wr, w_syn, w_ctr = weights
-
-        # ── 1. Individual hero win rates ─────────────────────────────────────
-        hero_wr_score = np.mean([
-            self._hero_winrate(h, patch)
-            for h in team_heroes
-        ])
-
-        # ── 2. Team synergy — all pairs within team ───────────────────────────
-        synergy_scores = [
-            self._synergy_score(h1, h2)
-            for i, h1 in enumerate(team_heroes)
-            for h2 in team_heroes[i+1:]
-        ]
-        synergy_scores = [s for s in synergy_scores if s is not None]
-        synergy_score = np.mean(synergy_scores) if synergy_scores else 0.50
-
-        # ── 3. Counter score — each team hero vs each enemy hero ─────────────
-        counter_scores = [
-            self._counter_score(h, e)
-            for h in team_heroes
-            for e in enemy_heroes
-        ]
-        counter_scores = [c for c in counter_scores if c is not None]
-        counter_score = np.mean(counter_scores) if counter_scores else 0.50
-
-        return (
-            w_wr  * hero_wr_score +
-            w_syn * synergy_score +
-            w_ctr * counter_score
-        )
-    
-    def draft_is_complete(self, match: dict) -> bool:
-        players = match.get('players', [])
-        if len(players) != 10:
-            return False
-        
-        # check all players have a hero assigned
-        heroes_assigned = all(p.get('hero_id', 0) != 0 for p in players)
-        if not heroes_assigned:
-            return False
-        
-        # check both teams have exactly 5 players
-        radiant = [p for p in players if p.get('team') == 0]
-        dire    = [p for p in players if p.get('team') == 1]
-        
-        return len(radiant) == 5 and len(dire) == 5
-
-    def get_draft(self, match: dict, live=True) -> tuple[list[int], list[int]]:
-        players = match.get('players', [])
-        if live:
-            radiant_heroes = [p['hero_id'] for p in players if p.get('team') == 0]
-            dire_heroes    = [p['hero_id'] for p in players if p.get('team') == 1]
-        else:
-            radiant_heroes = [p['hero_id'] for p in players if p.get('isRadiant') == True]
-            dire_heroes    = [p['hero_id'] for p in players if p.get('isRadiant') == False]
-        return radiant_heroes, dire_heroes
 
     def select(self, query, params=None, identifiers=None):
         with psycopg.connect(self.conn_str) as conn:
@@ -1006,6 +737,9 @@ class DotaDB:
             logging.error(f'Error with response: {e}')
             return False
         
+    def get_current_patch(self):
+        return self.select('SELECT id FROM patches ORDER BY "asOfDateTime" DESC LIMIT 1')[0]
+        
     def get_match_game_version(self, start_timestamp):
         start_datetime = datetime.fromtimestamp(start_timestamp)
         query = 'SELECT id FROM patches WHERE "asOfDateTime" < %s LIMIT 1'
@@ -1063,9 +797,7 @@ class DotaDB:
                 'firstBloodTime': result['first_blood_time'], 'towerStatusRadiant': result['tower_status_radiant'], 'towerStatusDire': result['tower_status_dire'],
                 'barracksStatusRadiant': result['barracks_status_radiant'], 'barracksStatusDire': result['barracks_status_dire'], 'rank': result.get('rank_tier'),
                 'actualRank': result.get('rank_tier_actual'), 'averageRank': result.get('average_rank'), 'averageImp': result.get('average_imp'),
-                'radiant_score': result['radiant_score'], 'dire_score': result['dire_score'], 'gameVersionId': game_version,
-                'avg_radiant_rating': avg_rad_rating, 'avg_dire_rating': avg_dire_rating,
-                'radiant_draft_score': radiant_draft_score, 'dire_draft_score': dire_draft_score
+                'radiant_score': result['radiant_score'], 'dire_score': result['dire_score'], 'gameVersionId': game_version
             }
             for obj in result.get('objectives'):
                 if obj['type'] == 'building_kill':
@@ -1168,7 +900,6 @@ class DotaDB:
                 else:
                     self.insert_df_into_table(pd.DataFrame(data), table_name=table)
             logging.info(f"Successfully fetched and stored data for match ID {match_id}")
-            self.update_ratings_from_match(match_id)
             return storage
 
         except Exception as e:

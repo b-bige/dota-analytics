@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath('./src'))
 from pathlib import Path
 
 import logging
-from basic_logger import setup_logger
+from core.logger import setup_logger
 setup_logger('logs/fetch_dataset_update.log')
 
 def fetch_dataset_update() -> dict:

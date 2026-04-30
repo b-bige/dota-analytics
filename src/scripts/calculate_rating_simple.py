@@ -7,24 +7,15 @@ import os, sys, logging
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from dota_db import DotaDB
-from basic_logger import setup_logger
+from database.dota_db import DotaDB
+from core.logger import setup_logger
 
 listener = setup_logger(logfile_path='logs/calculate_rating.log')
 log = logging.getLogger(__name__)
 db = DotaDB()
 
-NUMERATOR = input('Enter TAU numerator for rating model (leave blank for model default 25): ')
-DENOMINATOR = input('Enter TAU denominator for rating model (leave blank for model default 300): ')
-if not NUMERATOR:
-    NUMERATOR = 25
-else:
-    NUMERATOR = int(NUMERATOR)
-if not DENOMINATOR:
-    DENOMINATOR = 300
-else:
-    DENOMINATOR = int(DENOMINATOR)
-TAU = float(NUMERATOR / DENOMINATOR)
+raw_tau = input('Enter TAU (default 0.25): ')
+TAU = float(raw_tau) if raw_tau else 0.25
 model = PlackettLuce(tau=TAU)
 
 player_ratings = {}
@@ -35,9 +26,7 @@ next_anon_id = 0
 def main():
     global next_anon_id
     log.info(
-        f'Starting rating calculation with values: \n \
-            TAU NUMERATOR: {NUMERATOR} \n \
-            TAU DENOMINATOR: {DENOMINATOR}'
+        f'Starting rating calculation with tau: {TAU}'
     )
     
     log.info("Loading metadata...")
@@ -91,8 +80,8 @@ def main():
 
     history_df = pd.DataFrame(rating_history)
 
-    final_ratings.to_csv(f'data/player_ratings_{NUMERATOR}_{DENOMINATOR}.csv', index=False)
-    history_df.to_csv(f'data/rating_history_{NUMERATOR}_{DENOMINATOR}.csv', index=False)
+    final_ratings.to_csv(f'data/player_ratings_tau_{TAU}.csv', index=False)
+    history_df.to_csv(f'data/rating_history_tau_{TAU}.csv', index=False)
 
     log.info(f"Done. Rated {len(final_ratings):,} unique players.")
     log.info(f"Rating history: {len(history_df):,} entries.")

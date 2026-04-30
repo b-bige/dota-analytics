@@ -7,8 +7,8 @@ import os, sys, logging
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from dota_db import DotaDB
-from basic_logger import setup_logger
+from database.dota_db import DotaDB
+from core.logger import setup_logger
 
 CORE_WEIGHTS = {
     'gold_per_min':  0.40,  

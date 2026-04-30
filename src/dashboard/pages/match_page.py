@@ -1,8 +1,9 @@
 import dash
 from dash import html
 import dash_mantine_components as dmc
-from app_functions import *
 import logging
+from src.dashboard.app_functions import *
+from src.dashboard import db_manager
 logger = logging.getLogger(__name__)
 
 vs_logo = dmc.Avatar(
@@ -28,10 +29,10 @@ def layout(match_id=None, **kwargs):
 
 def render_match_page(match_id):
     query = 'SELECT "didRadiantWin", "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
-    rad_win, rad_team_id, dire_team_id = db.select(query, params=(match_id, ))[0]
+    rad_win, rad_team_id, dire_team_id = db_manager.select(query, params=(match_id, ))[0]
     query = 'SELECT name, logo FROM team_details WHERE id = %s'
-    rad = db.select(query, params=(rad_team_id, ))
-    dire = db.select(query, params=(dire_team_id, ))
+    rad = db_manager.select(query, params=(rad_team_id, ))
+    dire = db_manager.select(query, params=(dire_team_id, ))
     logo_query = 'SELECT logo_url FROM team_logos WHERE team_id = %s'
     try:
         if rad:
@@ -45,7 +46,7 @@ def render_match_page(match_id):
         rad_logo = ''
     if not rad_logo:
         try:
-            rad_logo = db.select(logo_query, params=(rad_team_id, ))[0]
+            rad_logo = db_manager.select(logo_query, params=(rad_team_id, ))[0]
         except:
             rad_logo = '/assets/no_image.svg'
     try:
@@ -60,7 +61,7 @@ def render_match_page(match_id):
         dire_logo = ''
     if not dire_logo:
         try:
-            dire_logo = db.select(logo_query, params=(dire_team_id, ))[0]
+            dire_logo = db_manager.select(logo_query, params=(dire_team_id, ))[0]
         except:
             dire_logo = '/assets/no_image.svg'
     query = '''
@@ -111,7 +112,7 @@ def render_match_page(match_id):
             END ASC,
             mp.position ASC
     '''
-    players_list = db.select(query, params=(match_id, ))
+    players_list = db_manager.select(query, params=(match_id, ))
     result_color = COLORS['radiant'] if rad_win else COLORS['dire']
     return dmc.Container(size="xl", fluid=True, children=[
         dmc.Grid(gutter="md", children=[

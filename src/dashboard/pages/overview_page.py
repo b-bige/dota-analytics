@@ -9,14 +9,16 @@ import time
 import logging
 logger = logging.getLogger(__name__)
 
-from theme import PLOTLY_COLORSCALES, COLORS
+from src.dashboard.theme import PLOTLY_COLORSCALES, COLORS
 
-from app_functions import *
-from dashboard.filters import *
+from src.dashboard.app_functions import *
+from src.dashboard.filters import *
+from src.dashboard import db_manager
+from src.dashboard.query_builder import QueryBuilder
 
 dash.register_page(__name__, path='')
 
-_all_heroes = [r[0] for r in db.select('SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC')]
+_all_heroes = [r[0] for r in db_manager.select('SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC')]
 
 def layout(**kwargs):
     return dmc.Tabs(
@@ -29,7 +31,7 @@ def layout(**kwargs):
                     dmc.Group(
                         children=[
                             dmc.TabsTab('Overview', value='overview'),
-                            dmc.TabsTab('Meta analysis', value='meta'),
+                            # dmc.TabsTab('Meta analysis', value='meta'),
                             dmc.TabsTab('Economy analysis', value='economy'),
                         ]
                     )
@@ -77,7 +79,7 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
         AVG("durationSeconds")
         '''
     )
-    results = db.select(query, params=params)[0]
+    results = db_manager.select(query, params=params)[0]
     found_matches = results[0]
     if found_matches == 0:
         return html.Div(
@@ -102,14 +104,14 @@ def render_overview_layout(qb: QueryBuilder, filters: dict, graph_select, has_fi
     radiant_win = str(round(results[1], 2)) + '%'
     avg_game_length = convert_duration_format(results[2]) 
     query, params = qb.build(select='AVG(radiant_score + dire_score)')
-    avg_kills = round(db.select(query, params=params)[0][0], 0)
+    avg_kills = round(db_manager.select(query, params=params)[0][0], 0)
     if not graph_select:
         graph_select = 'win'
     try:
         duration_fig = fig_duration_hist(qb.copy())
         if filters['heroes']:
             query, params = qb.build('md.id')
-            ids = [r[0] for r in db.select(query, params=params)]
+            ids = [r[0] for r in db_manager.select(query, params=params)]
             qb_heroes = QueryBuilder()
             qb_heroes.where('md.id = ANY(%s)', ids)
             qb_heroes = Filter.handle_filters(qb_heroes, **filters, exclude='heroes')

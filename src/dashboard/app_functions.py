@@ -1,28 +1,13 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import httpx
-
-import concurrent.futures
-
-import os
-import sys
-sys.path.append(os.path.abspath('./src/dashboard'))
-sys.path.append(os.path.abspath('./src'))
-
-from theme import PLOTLY_LAYOUT, PLOTLY_COLORSCALES, COLORS
 import plotly.graph_objects as go
 import plotly.express as px
-
-import logging
-import time
-
-from dota_db import DotaDB
-from dashboard.query_builder import *
-from dashboard.filters import *
-
-db = DotaDB(schema='public')
-_DB_MAX_DURATION = None
+from src.dashboard.theme import PLOTLY_LAYOUT, PLOTLY_COLORSCALES, COLORS
+from src.database import engine, DatabaseManager
+from src.dashboard.query_builder import QueryBuilder
+from src.dashboard.filters import FILTER_MAP
+from src.dashboard import db_manager
 
 ##### Theming
 def apply_fig_theme(fig: go.Figure):
@@ -35,7 +20,7 @@ def get_total_matches(clauses: str='', params=None):
     query = 'SELECT COUNT(id) FROM match_details md '
     if clauses:
         query += clauses
-    return db.select(query, params=params)[0][0]
+    return db_manager.select(query, params=params)[0][0]
 
 def get_teams(**kwargs):
     qb = QueryBuilder()
@@ -52,7 +37,7 @@ def get_teams(**kwargs):
         {q2}
         ORDER BY name ASC
     '''
-    return [r[0] for r in db.select(query, params=params1 + params2)]
+    return [r[0] for r in db_manager.select(query, params=params1 + params2)]
 
 def get_patches(**kwargs):
     qb = QueryBuilder()
@@ -62,7 +47,7 @@ def get_patches(**kwargs):
         select='DISTINCT p.name',
         order_by='ORDER BY p.name DESC'
     )
-    return [result[0] for result in db.select(query, params=params)]
+    return [result[0] for result in db_manager.select(query, params=params)]
 
 def get_leagues(**kwargs):
     qb = QueryBuilder()
@@ -73,7 +58,7 @@ def get_leagues(**kwargs):
         extra_conditions='ld."displayName" NOT LIKE \'?%%\'',
         order_by='ORDER BY ld."displayName" ASC'
     )
-    leagues = [result[0] for result in db.select(query, params=params)]
+    leagues = [result[0] for result in db_manager.select(query, params=params)]
     return leagues
 
 def get_date_boundary(boundary, **kwargs): 
@@ -82,7 +67,7 @@ def get_date_boundary(boundary, **kwargs):
     query, params = qb.build(
         select=f'{boundary}(md."startDateTimeHuman")'
     )
-    return db.select(query, params=params)[0][0]
+    return db_manager.select(query, params=params)[0][0]
 
 def handle_filters(qb: QueryBuilder, exclude=None, **kwargs):
     if kwargs.get('league') and kwargs.get('exclude', None) != 'league':
@@ -139,11 +124,11 @@ def convert_duration_format(duration: int) -> str:
 
 ##### Overview graph helpers
 def get_match_ids(query, params):
-    return [res[0] for res in db.select(query, params=params)]
+    return [res[0] for res in db_manager.select(query, params=params)]
 
 def fig_most_picked(qb: QueryBuilder, match_count):
-    if not qb.is_filtered():
-        results = db.select(
+    if not qb.is_filtered:
+        results = db_manager.select(
             '''SELECT picks, "displayName" 
                FROM hero_pick_ban_stats 
                ORDER BY picks DESC LIMIT 5'''
@@ -156,7 +141,7 @@ def fig_most_picked(qb: QueryBuilder, match_count):
             extra_conditions='',
             order_by='GROUP BY hd."displayName" ORDER BY count DESC LIMIT 5'
         )
-        results = db.select(query, params=params)
+        results = db_manager.select(query, params=params)
 
     most_picked = pd.DataFrame(results, columns=['picks', 'hero']).sort_values('picks')
     most_picked['picks'] = (most_picked['picks'] / match_count).round(2) 
@@ -183,8 +168,8 @@ def fig_most_picked(qb: QueryBuilder, match_count):
     return fig
 
 def fig_most_banned(qb:QueryBuilder, match_count):
-    if not qb.is_filtered():
-        results = db.select(
+    if not qb.is_filtered:
+        results = db_manager.select(
             '''SELECT bans, "displayName" 
                FROM hero_pick_ban_stats 
                ORDER BY bans DESC LIMIT 5'''
@@ -196,7 +181,7 @@ def fig_most_banned(qb:QueryBuilder, match_count):
             select='COUNT(*) FILTER (WHERE mpb."isPick" = FALSE) AS count, hd."displayName"',
             order_by='GROUP BY hd."displayName" ORDER BY count DESC LIMIT 5'
         )
-        results = db.select(query, params=params)
+        results = db_manager.select(query, params=params)
 
     most_banned = pd.DataFrame(results, columns=['bans', 'hero']).sort_values('bans')
     most_banned['bans'] = (most_banned['bans'] / match_count).round(2) 
@@ -224,8 +209,8 @@ def fig_most_banned(qb:QueryBuilder, match_count):
 
 def fig_top_winrate(qb: QueryBuilder, match_count):
     min_picks = max(2, match_count // 10)
-    if not qb.is_filtered():
-        results = db.select(
+    if not qb.is_filtered:
+        results = db_manager.select(
             '''SELECT winrate, picks, "displayName"
                FROM hero_winrate_stats
                WHERE picks >= %s
@@ -241,7 +226,7 @@ def fig_top_winrate(qb: QueryBuilder, match_count):
             group_by='GROUP BY hd."displayName"',
             order_by='ORDER BY winrate DESC LIMIT 5'
         )
-        results = db.select(query, params=params)
+        results = db_manager.select(query, params=params)
 
     winrates = (pd.DataFrame(results, columns=['winrate', 'picks', 'hero'])
                 .convert_dtypes()
@@ -273,8 +258,8 @@ def fig_top_winrate(qb: QueryBuilder, match_count):
     return fig
 
 def fig_most_present(qb: QueryBuilder, match_count):
-    if not qb.is_filtered():
-        results = db.select(
+    if not qb.is_filtered:
+        results = db_manager.select(
             '''SELECT presence, "displayName" 
                FROM hero_presence_stats
                ORDER BY presence DESC LIMIT 5'''
@@ -286,7 +271,7 @@ def fig_most_present(qb: QueryBuilder, match_count):
             select='COUNT(*) AS presence, hd."displayName"',
             order_by='GROUP BY hd."displayName" ORDER BY presence DESC LIMIT 5'
         )
-        results = db.select(query, params=params)
+        results = db_manager.select(query, params=params)
     most_present = pd.DataFrame(results, columns=['presence', 'hero']).sort_values('presence')
     most_present['presence'] = (most_present['presence'] / match_count).round(2)
     fig = go.Figure()
@@ -313,7 +298,7 @@ def fig_most_present(qb: QueryBuilder, match_count):
 
 def fig_duration_hist(qb: QueryBuilder):
     query, params = qb.build(select='"durationSeconds" / 60')
-    results = pd.Series([r[0] for r in db.select(query, params=params)])
+    results = pd.Series([r[0] for r in db_manager.select(query, params=params)])
     fig = px.histogram(results, nbins=30, color_discrete_sequence=[COLORS['primary']])
     fig = apply_fig_theme(fig)
     fig.update_traces(
@@ -341,7 +326,7 @@ def fig_gpm_volatility(qb: QueryBuilder, hero_list: list):
     qb.join('hd', 'JOIN hero_details hd ON mp."heroId" = hd.id')
     qb.where('hd."displayName" = ANY(%s)', hero_list)
     query, params = qb.build(select='hd.id as hero_id, hd."displayName" as hero_name, mp."goldPerMinute" as gpm')
-    results = db.select(query, params=params)
+    results = db_manager.select(query, params=params)
     df = pd.DataFrame(results, columns=['hero_id', 'hero_name', 'gpm'])
     fig = go.Figure()
     fig.add_trace(go.Box(
@@ -373,7 +358,7 @@ def fig_greed_plot(qb: QueryBuilder, position):
     '''
     qb.where('networth IS NOT NULL AND position IS NOT NULL')
     query, params = qb.build(select='match_id, position, networth, "isRadiant", "isVictory"')
-    df = db.select_to_df(query, columns=['match_id', 'position', 'networth', 'rad', 'win'], params=params)
+    df = db_manager.select_to_df(query, columns=['match_id', 'position', 'networth', 'rad', 'win'], params=params)
     df['total_networth'] = df.groupby(['match_id', 'rad'])['networth'].transform('sum')
     df['networth_share'] = df['networth'] / df['total_networth']
     pos_stats: pd.DataFrame = df[df['position'] == position_map[position]].copy()
@@ -421,7 +406,7 @@ def update_url_from_filters_helper(params, filters):
 
 def get_db_max_duration(): #TODO: Update this so it updates, or maybe move this to a materialized view and trigger updates
     query = 'SELECT MAX("durationSeconds") / 60 FROM match_details'
-    return db.select(query)[0][0]
+    return db_manager.select(query)[0][0]
 
 def get_dynamic_val(inputs, index_name, default):
     for item in inputs:

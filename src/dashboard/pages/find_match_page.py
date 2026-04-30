@@ -1,24 +1,13 @@
 import dash
 from dash import html, dcc, callback, Input, Output, State, no_update, ctx
 import dash_mantine_components as dmc
-
 from math import floor
 from urllib.parse import parse_qs
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
-import os
-import sys
-import logging
-logger = logging.getLogger(__name__)
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-DASHBOARD_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../"))
-SRC_DIR = os.path.abspath(os.path.join(DASHBOARD_DIR, '../'))
-sys.path.append(DASHBOARD_DIR)
-sys.path.append(SRC_DIR)
-
-from app_functions import *
-from dashboard.filters import *
+from src.dashboard import db_manager
+from src.dashboard.app_functions import *
+from src.dashboard.filters import *
 
 vs_logo = dmc.Avatar(
     "VS",
@@ -86,7 +75,7 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
     qb = QueryBuilder()
     Filter.handle_filters(qb, **filters)
     query, params = qb.build(select='COUNT(md.id)')
-    total_records = db.select(query, params=params)[0][0]
+    total_records = db_manager.select(query, params=params)[0][0]
     total_pages = -(-total_records // PAGE_SIZE)  
 
     if triggered != 'match-pagination':
@@ -124,7 +113,7 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
         'radiant_name', 'dire_name', 'radiant_logo', 'dire_logo', 'league_name',
         'rad_rating', 'dire_rating', 'radiant_draft_score', 'dire_draft_score'
     ]
-    matches = [dict(zip(columns, row)) for row in db.select(query, params=params)]
+    matches = [dict(zip(columns, row)) for row in db_manager.select(query, params=params)]
     elements = [create_match_element(row) for row in matches]
     return elements, total_pages, page_number
     
@@ -136,8 +125,16 @@ def create_match_element(row: dict):
     league = row.get('league_name', None)
     rad_rating = row.get('rad_rating', None)
     dire_rating = row.get('dire_rating', None)
-    radiant_draft_score = round(row.get('radiant_draft_score', None), 2)
-    dire_draft_score = round(row.get('dire_draft_score', None), 2)
+    radiant_draft_score = row.get('radiant_draft_score')
+    dire_draft_score = row.get('dire_draft_score')
+    if radiant_draft_score:
+        radiant_draft_score = round(radiant_draft_score, 2)
+    else:
+        radiant_draft_score = 0.5
+    if dire_draft_score: 
+        dire_draft_score = round(dire_draft_score, 2) 
+    else:
+        dire_draft_score = 0.5
     if rad_rating:
         rad_rating = round(rad_rating, 2)
     else:

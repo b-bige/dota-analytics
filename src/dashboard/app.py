@@ -1,37 +1,13 @@
-import pandas as pd
-import numpy as np
-
-from urllib.parse import urlencode, parse_qs 
-
-import os
-import sys
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "../../"))
-SRC_DIR = os.path.join(PROJECT_ROOT, "src")
-
-sys.path.append(PROJECT_ROOT)
-sys.path.append(SRC_DIR)
-sys.path.append(CURRENT_DIR)
-
-from dota_db import DotaDB
-from app_functions import *
-
 from dash import Dash, html, dcc, Input, Output, State, page_container, no_update, ctx
 import dash_mantine_components as dmc
+from urllib.parse import urlencode, parse_qs
 
-import logging
-from basic_logger import setup_logger
-import time
+from src.database import DatabaseManager
+from src.dashboard.app_functions import *
+from src.dashboard.theme import *
+from src.dashboard.filters import FILTER_IDS, FILTERS
+from src.dashboard import app
 
-from theme import *
-from dashboard.filters import *
-from live_match_monitor import monitor
-
-db = DotaDB(schema='public')
-listener = setup_logger(logfile_path='logs/dashboard.log')
-app = Dash(__name__, use_pages=True, suppress_callback_exceptions=True)
-
-server = app.server
 app.layout = dmc.MantineProvider(
     theme=MANTINE_THEME,
     children=[

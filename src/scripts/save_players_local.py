@@ -5,13 +5,13 @@ import sys
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from dota_db import DotaDB
+from database.dota_db import DotaDB
 
 import logging
-import basic_logger
+import core.logger as logger
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "../../"))
-basic_logger.setup_logger(logfile_path=f'{str(PROJECT_PATH)}/logs/save_local_players.log')
+logger.setup_logger(logfile_path=f'{str(PROJECT_PATH)}/logs/save_local_players.log')
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS player_match_stats (

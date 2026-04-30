@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 sys.path.append(os.path.abspath('./src'))
 import logging
-from basic_logger import setup_logger
-from dota_db import DotaDB
+from core.logger import setup_logger
+from database.dota_db import DotaDB
 listener = setup_logger(logfile_path='logs/update_dataset.log')
 
 def main():
