@@ -11,7 +11,9 @@ wheels/
 .env
 
 # Logs
-/logs
+**/logs/
+
+#Data
 /data
 
 # VSCode
