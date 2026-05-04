@@ -12,3 +12,9 @@ CREATE INDEX idx_mv_winrate ON hero_winrate_stats(winrate DESC);
 CREATE INDEX idx_mv_hero_picks ON hero_winrate_stats(picks);
 CREATE INDEX idx_mv_picks ON hero_pick_ban_stats(picks DESC);
 CREATE INDEX idx_mv_bans ON hero_pick_ban_stats(bans DESC);
+
+CREATE INDEX IF NOT EXISTS idx_match_players_match_id 
+ON match_players(match_id);
+CREATE INDEX IF NOT EXISTS idx_match_players_position 
+ON match_players(position);
+CREATE INDEX idx_mv_networth_position ON mv_match_networth_shares(position);

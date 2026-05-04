@@ -48,3 +48,23 @@ JOIN match_players mp2
     AND mp1."isRadiant" != mp2."isRadiant"
 GROUP BY 1, 2
 HAVING COUNT(*) >= 20;
+
+CREATE MATERIALIZED VIEW mv_match_networth_shares AS
+SELECT 
+    mp.match_id,
+    mp.position,
+    mp.networth,
+    mp."isRadiant",
+    mp."isVictory",
+    (CAST(mp.networth AS FLOAT) / tn.total_networth) AS networth_share
+FROM match_players mp
+JOIN (
+    SELECT 
+        match_id,
+        "isRadiant",
+        SUM(networth) AS total_networth
+    FROM match_players
+    WHERE networth IS NOT NULL
+    GROUP BY match_id, "isRadiant"
+) tn ON mp.match_id = tn.match_id AND mp."isRadiant" = tn."isRadiant"
+WHERE mp.position IS NOT NULL;

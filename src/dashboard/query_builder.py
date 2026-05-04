@@ -34,6 +34,11 @@ class QueryBuilder:
         return self
 
     def build(self, select:str, group_by:str='', order_by:str='', extra_conditions:str='', extra_params:dict=None):
+        """
+        Builds the query that is ready for use with SQLAlchemy 
+        and combines the parameter dictionaries. 
+        Returns a tuple containing the query, and the parameter dictionary. 
+        """
         extra_params = extra_params or {}
         joins = ' '.join(self._joins.values())
 

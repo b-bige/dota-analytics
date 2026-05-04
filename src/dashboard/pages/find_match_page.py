@@ -23,18 +23,22 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
         size='lg',
         children=[ 
-            dmc.ScrollArea(
-                h=550,
-                offsetScrollbars=True,
-                children=[
-                    dmc.SimpleGrid(
-                        id='match-container', 
-                        cols=2,        
-                        spacing="md", 
-                        mt=10,
-                        children=[]
-                    )
-                ]
+            dcc.Loading(
+                dmc.ScrollArea(
+                    h=550,
+                    offsetScrollbars=True,
+                    children=[
+                        dmc.SimpleGrid(
+                            id='match-container', 
+                            cols=2,        
+                            spacing="md", 
+                            mt=10,
+                            children=[]
+                        )
+                    ]
+                ),
+                type='circle',
+                color=COLORS['primary']
             ),
             dmc.Space(h="md"),
             dmc.Group(
@@ -103,8 +107,8 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
             md.avg_radiant_rating, md.avg_dire_rating, 
             md.radiant_draft_score, md.dire_draft_score
         ''',
-        order_by='ORDER BY md."startDateTimeHuman" DESC LIMIT %s OFFSET %s',
-        extra_params=[PAGE_SIZE, offset]
+        order_by='ORDER BY md."startDateTimeHuman" DESC LIMIT :page_size OFFSET :offset', #TODO: Make a separate clause for these in querybuilder
+        extra_params={'page_size': PAGE_SIZE, 'offset': offset}
     )
 
     columns = [

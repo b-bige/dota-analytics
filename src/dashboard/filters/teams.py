@@ -25,7 +25,7 @@ class TeamsFilter(Filter):
                         {'team_one_name': value[0], 'team_two_name': value[1]}
                     )
                 else:
-                    qb.where('(radiant.name = ANY(%s)) OR (dire.name = ANY(%s))', value, value)
+                    qb.where('(radiant.name = ANY(:team_names)) OR (dire.name = ANY(:team_names))', {'team_names': value})
         return qb
 
     def to_url_params(self, value):

@@ -8,111 +8,20 @@ from src.database import engine, DatabaseManager
 from src.dashboard.query_builder import QueryBuilder
 from src.dashboard.filters import FILTER_MAP
 from src.dashboard import db_manager
+import time
 
 ##### Theming
 def apply_fig_theme(fig: go.Figure):
     fig.update_layout(**PLOTLY_LAYOUT)
     return fig
 
-##### Basic and filter helpers
+##### Helpers
 
 def get_total_matches(clauses: str='', params=None):
     query = 'SELECT COUNT(id) FROM match_details md '
     if clauses:
         query += clauses
     return db_manager.select(query, params=params)[0][0]
-
-def get_teams(**kwargs):
-    qb = QueryBuilder()
-    qb.join('tdr', 'INNER JOIN team_details tdr ON tdr.id = md."radiantTeamId"')
-    qb.join('tdd', 'INNER JOIN team_details tdd ON tdd.id = md."direTeamId"')
-    qb.where('tdr."isPro" = \'t\' AND tdd."isPro" = \'t\'')
-    handle_filters(qb, **kwargs)
-    q1, params1 = qb.build(select='DISTINCT tdr.name')
-    q2, params2 = qb.copy().build(select='DISTINCT tdd.name')
-
-    query = f'''
-        {q1}
-        UNION
-        {q2}
-        ORDER BY name ASC
-    '''
-    return [r[0] for r in db_manager.select(query, params=params1 + params2)]
-
-def get_patches(**kwargs):
-    qb = QueryBuilder()
-    qb.join('p', 'INNER JOIN patches p ON md."gameVersionId" = p.id')
-    handle_filters(qb, **kwargs) 
-    query, params = qb.build(
-        select='DISTINCT p.name',
-        order_by='ORDER BY p.name DESC'
-    )
-    return [result[0] for result in db_manager.select(query, params=params)]
-
-def get_leagues(**kwargs):
-    qb = QueryBuilder()
-    qb.join('ld', 'INNER JOIN league_details ld ON md."leagueId" = ld.id')
-    handle_filters(qb, **kwargs) 
-    query, params = qb.build(
-        select='DISTINCT ld."displayName"',
-        extra_conditions='ld."displayName" NOT LIKE \'?%%\'',
-        order_by='ORDER BY ld."displayName" ASC'
-    )
-    leagues = [result[0] for result in db_manager.select(query, params=params)]
-    return leagues
-
-def get_date_boundary(boundary, **kwargs): 
-    qb = QueryBuilder()
-    handle_filters(qb, **kwargs)
-    query, params = qb.build(
-        select=f'{boundary}(md."startDateTimeHuman")'
-    )
-    return db_manager.select(query, params=params)[0][0]
-
-def handle_filters(qb: QueryBuilder, exclude=None, **kwargs):
-    if kwargs.get('league') and kwargs.get('exclude', None) != 'league':
-        qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
-        qb.where('ld."displayName" = %s', kwargs['league'])
-
-    if kwargs.get('patch') and kwargs.get('exclude', None) != 'patch':
-        qb.join('p', 'LEFT JOIN patches p ON md."gameVersionId" = p.id')
-        qb.where('p.name = %s', kwargs['patch'])
-
-    if kwargs.get('teams') and kwargs.get('exclude', None) != 'teams':
-        teams = kwargs.get('teams')
-        if teams[0]:
-            qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
-            qb.join('dire', 'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
-            if len(teams) == 2:
-                qb.where(
-                    '(radiant.name = %s AND dire.name = %s) OR (radiant.name = %s AND dire.name = %s)',
-                    teams[0], teams[1], teams[1], teams[0]
-                )
-            else:
-                qb.where('(radiant.name = ANY(%s)) OR (dire.name = ANY(%s))', teams, teams)
-
-    if kwargs.get('durations') and kwargs.get('exclude', None) != 'durations':
-        start, end = kwargs.get('durations')
-        start = int(start)*60 if start else 0
-        end = int(end)*60 if end else get_db_max_duration()
-        if start and start != 0:
-            qb.where('md."durationSeconds" > %s', start)
-        if end and end != get_db_max_duration()*60:
-            qb.where('md."durationSeconds" < %s', end)
-
-    if kwargs.get('dates', [None])[0] and kwargs.get('exclude', None) != 'dates':
-        start, end = handle_date_filter(kwargs['dates'])
-        qb.where('md."startDateTimeHuman" BETWEEN %s AND %s', start, end)
-    return qb
-
-def handle_date_filter(dates):
-    if dates[0]:
-        start_date = datetime.fromisoformat(dates[0])
-        if dates[0] and dates[1]:
-            end_date = datetime.fromisoformat(dates[1]) + timedelta(days=1)
-        else:
-            end_date = datetime.fromisoformat(dates[0]) + timedelta(days=1)
-    return [start_date, end_date]
 
 def convert_duration_format(duration: int) -> str:
     duration = round(duration)
@@ -122,9 +31,7 @@ def convert_duration_format(duration: int) -> str:
         seconds += '0'
     return minutes + ':' + seconds
 
-##### Overview graph helpers
-def get_match_ids(query, params):
-    return [res[0] for res in db_manager.select(query, params=params)]
+##### Graphs
 
 def fig_most_picked(qb: QueryBuilder, match_count):
     if not qb.is_filtered:
@@ -213,14 +120,14 @@ def fig_top_winrate(qb: QueryBuilder, match_count):
         results = db_manager.select(
             '''SELECT winrate, picks, "displayName"
                FROM hero_winrate_stats
-               WHERE picks >= %s
+               WHERE picks >= :min_picks
                ORDER BY winrate DESC LIMIT 5''',
-            params=(min_picks,)
+            params={'min_picks': min_picks}
         )
     else:
         qb.join('mp', 'JOIN match_players mp ON mp.match_id = md.id')
         qb.join('hd', 'JOIN hero_details hd ON mp."heroId" = hd.id')
-        qb.having('COUNT(*) >= %s', min_picks)
+        qb.having('COUNT(*) >= :min_picks', {'min_picks': min_picks})
         query, params = qb.build(
             select='AVG(CAST(mp."isVictory" AS INT)) AS winrate, COUNT(*) as picks, hd."displayName"',
             group_by='GROUP BY hd."displayName"',
@@ -297,10 +204,49 @@ def fig_most_present(qb: QueryBuilder, match_count):
     return fig
 
 def fig_duration_hist(qb: QueryBuilder):
-    query, params = qb.build(select='"durationSeconds" / 60')
-    results = pd.Series([r[0] for r in db_manager.select(query, params=params)])
-    fig = px.histogram(results, nbins=30, color_discrete_sequence=[COLORS['primary']])
+    query, params = qb.build(select='"durationSeconds" / 60 AS duration_minutes')
+    df = db_manager.select_to_df(query, params)
+    n_matches = len(df)
+    if n_matches < 30:
+        df['count'] = 1
+        
+        fig = px.strip(
+            df, 
+            x='duration_minutes',
+            title="Match duration distribution (Individual matches)",
+            template='plotly_white',
+            stripmode='group'
+        )
+        fig = apply_fig_theme(fig)
+        fig.update_traces(
+            hovertemplate="Duration: %{x:f} minutes<br>"
+        )
+        fig.update_yaxes(
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False
+        )
+        fig.update_layout(
+            xaxis_title="Match Duration (Minutes)",
+            yaxis_title="Number of Matches",
+            bargap=0.4 # Slightly wider gap for small sets to make them distinct
+        )
+        return fig
+    min_val = df['duration_minutes'].min()
+    max_val = df['duration_minutes'].max()
+    data_range = max_val - min_val
+    if data_range == 0:
+        data_range = 10
+    target_bins = 30
+    bin_size = max(1, round(data_range / target_bins))
+    bins = np.arange(np.floor(min_val), np.ceil(max_val) + bin_size, bin_size)
+    fig = px.histogram(df, nbins=len(bins), color_discrete_sequence=[COLORS['primary']])
     fig = apply_fig_theme(fig)
+    fig.update_traces(xbins=dict(
+        start=bins[0],
+        end=bins[-1],
+        size=bin_size
+    ))
     fig.update_traces(
         patch={
             'marker': dict(
@@ -313,9 +259,9 @@ def fig_duration_hist(qb: QueryBuilder):
         }
     )
     fig.update_layout(
-        title="Match duration",
+        title="Match duration distribution",
         autosize=True,
-        xaxis=dict(showgrid=False, title_text='Match Duration Distribution', ticksuffix='m'),
+        xaxis=dict(showgrid=False, title_text='Match Duration (Minutes)', ticksuffix='m'),
         yaxis=dict(showgrid=False, title_text='Number of Matches'),
         showlegend=False
     )
@@ -324,7 +270,7 @@ def fig_duration_hist(qb: QueryBuilder):
 def fig_gpm_volatility(qb: QueryBuilder, hero_list: list):
     qb.join('mp', 'JOIN match_players mp ON mp.match_id = md.id')
     qb.join('hd', 'JOIN hero_details hd ON mp."heroId" = hd.id')
-    qb.where('hd."displayName" = ANY(%s)', hero_list)
+    qb.where('hd."displayName" = ANY(:hero_list)', {'hero_list': hero_list})
     query, params = qb.build(select='hd.id as hero_id, hd."displayName" as hero_name, mp."goldPerMinute" as gpm')
     results = db_manager.select(query, params=params)
     df = pd.DataFrame(results, columns=['hero_id', 'hero_name', 'gpm'])
@@ -351,28 +297,38 @@ def fig_greed_plot(qb: QueryBuilder, position):
         'Roamer/Soft Support': 'POSITION_4',
         'Hard Support': 'POSITION_5'
     }
-    qb.join('mp', 'JOIN match_players mp ON mp.match_id = md.id')
-    query = '''
-        SELECT match_id, position, networth, "isRadiant", "isVictory" FROM match_players
-        WHERE networth IS NOT NULL AND position IS NOT NULL;
-    '''
-    qb.where('networth IS NOT NULL AND position IS NOT NULL')
-    query, params = qb.build(select='match_id, position, networth, "isRadiant", "isVictory"')
-    df = db_manager.select_to_df(query, columns=['match_id', 'position', 'networth', 'rad', 'win'], params=params)
-    df['total_networth'] = df.groupby(['match_id', 'rad'])['networth'].transform('sum')
-    df['networth_share'] = df['networth'] / df['total_networth']
-    pos_stats: pd.DataFrame = df[df['position'] == position_map[position]].copy()
-    pos_stats['share_bucket'] = pd.cut(
-        pos_stats['networth_share'],
-        bins=[0, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 1.0],
-        labels=['<15%', '15-20%', '20-25%', '25-30%', '30-35%', '35-40%', '>40%']
-    )
-    winrate_by_share = (
-        pos_stats.groupby('share_bucket', observed=True)['win']
-        .agg(['mean', 'count'])
-        .reset_index()
-        .rename(columns={'mean': 'winrate', 'count': 'games'})
-    )
+    
+    # 1. Define the SQL query using the WIDTH_BUCKET approach
+    query = """
+        SELECT 
+            WIDTH_BUCKET(networth_share, 0, 0.40, 6) AS bucket_index,
+            AVG(CAST("isVictory" AS INT)) AS winrate,
+            COUNT(*) AS games
+        FROM mv_match_networth_shares
+        WHERE position = :pos_filter
+        GROUP BY bucket_index
+        ORDER BY bucket_index;
+    """
+    
+    # Execute with position parameter bound
+    params = {'pos_filter': position_map[position]}
+    results = db_manager.select(query, params=params)
+    
+    # Map the numeric buckets back to categorical labels
+    winrate_by_share = pd.DataFrame(results, columns=['bucket_index', 'winrate', 'games'])
+    
+    # Map the index to your standard UI buckets
+    bucket_labels = {
+        1: '<15%',
+        2: '15-20%',
+        3: '20-25%',
+        4: '25-30%',
+        5: '30-35%',
+        6: '35-40%',
+        7: '>40%' # Handles values above the 0.40 upper bound
+    }
+    
+    winrate_by_share['share_bucket'] = winrate_by_share['bucket_index'].map(bucket_labels)
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -404,12 +360,5 @@ def update_url_from_filters_helper(params, filters):
         params.update(FILTER_MAP[filter_name].to_url_params(value))
     return params
 
-def get_db_max_duration(): #TODO: Update this so it updates, or maybe move this to a materialized view and trigger updates
-    query = 'SELECT MAX("durationSeconds") / 60 FROM match_details'
-    return db_manager.select(query)[0][0]
-
-def get_dynamic_val(inputs, index_name, default):
-    for item in inputs:
-        if item['id']['index'] == index_name:
-            return item['value'] if item['value'] is not None else default
-    return default
+if __name__ == '__main__':
+    fig_greed_plot(QueryBuilder(), 'Carry')
