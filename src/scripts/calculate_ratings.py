@@ -7,12 +7,12 @@ import os, sys, logging
 sys.path.append(os.path.abspath('./src'))
 sys.path.append(os.path.abspath('./src/logger'))
 
-from database.dota_db import DotaDB
+from database import DatabaseManager
 from core.logger import setup_logger
 
 listener = setup_logger(logfile_path='logs/calculate_rating.log')
 log = logging.getLogger(__name__)
-db = DotaDB()
+db = DatabaseManager()
 
 raw_tau = input('Enter TAU (default 0.25): ')
 TAU = float(raw_tau) if raw_tau else 0.25
@@ -22,15 +22,20 @@ player_ratings = {}
 rating_history = []
 next_anon_id = 0
 
-
 def main():
+    """
+    Recalculates rating and saves them as two distinct CSVs:
+    - player_ratings: current ratings for the players
+    - rating_history: the ratings for players before each match
+    Used to apply different rating model setups to retrain models.
+    """
     global next_anon_id
     log.info(
         f'Starting rating calculation with tau: {TAU}'
     )
     
     log.info("Loading metadata...")
-    metadata = db.select_to_df('SELECT * FROM match_details', table='match_details')
+    metadata = db.select_to_df('SELECT * FROM match_details')
     metadata = metadata.sort_values(by='startDateTimeHuman', ascending=True).reset_index(drop=True)
 
     radiant_win_lookup = dict(zip(metadata['id'], metadata['didRadiantWin']))
@@ -50,9 +55,8 @@ def main():
     for i in range(0, total, BATCH_SIZE):
         batch = valid_mids[i:i + BATCH_SIZE]
         players_df = db.select_to_df(
-            'SELECT * FROM match_players WHERE match_id = ANY(%s)',
-            params=(batch,),
-            table='match_players'
+            'SELECT * FROM match_players WHERE match_id = ANY(:match_ids)',
+            params={'match_ids': batch},
         )
         for match_id, group in players_df.groupby('match_id'):
             radiant_win = radiant_win_lookup.get(match_id)
@@ -105,7 +109,6 @@ def get_or_create_player_id(account_id, match_id, hero_id):
     
     return anon_id
 
-
 def process_match(match_id, players_df, radiant_win):
     """
     Process a single match: append to rating history, calculate ratings, update player ratings.
@@ -127,11 +130,9 @@ def process_match(match_id, players_df, radiant_win):
         pid = get_or_create_player_id(row['steamAccountId'], match_id, row['heroId'])
         dire_ids.append(pid)
 
-    # Get current ratings before update
     radiant_ratings = [player_ratings[pid] for pid in radiant_ids]
     dire_ratings = [player_ratings[pid] for pid in dire_ids]
 
-    # Append to rating history (before update)
     for pid, r in zip(radiant_ids, radiant_ratings):
         if not isinstance(pid, str):
             rating_history.append({
@@ -154,16 +155,13 @@ def process_match(match_id, players_df, radiant_win):
                 'ordinal': r.ordinal(),
             })
 
-    # Update ratings based on match outcome
     if radiant_win:
         new_radiant, new_dire = model.rate([radiant_ratings, dire_ratings])
     else:
         new_dire, new_radiant = model.rate([dire_ratings, radiant_ratings])
 
-    # Update player ratings dictionary
     for pid, new_r in zip(radiant_ids + dire_ids, new_radiant + new_dire):
         player_ratings[pid] = new_r
-
 
 if __name__ == '__main__':
     main()

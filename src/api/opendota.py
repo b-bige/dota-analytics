@@ -41,8 +41,13 @@ class OpenDotaClient(BaseDotaClient):
     @sleep_and_retry 
     @limits(calls=60, period=60) #Minute
     @limits(calls=3000, period=86400) #Day
-    def request(self, endpoint: str):
-        response = self.client.get(f'{self.OPENDOTA_URL}/{endpoint}') 
+    def request(self, endpoint: str, method: str='GET'):
+        if method == 'GET':
+            response = self.client.get(f'{self.OPENDOTA_URL}/{endpoint}') 
+        elif method == 'POST':
+            response = self.client.post(f'{self.OPENDOTA_URL}/{endpoint}')
+        else:
+            raise ValueError('Unknown method passed')
         try:
             response.raise_for_status()
             result = response.json()
@@ -51,17 +56,24 @@ class OpenDotaClient(BaseDotaClient):
             if e.response.status_code == 429:
                 logging.warning(f'Rate limit exceeded: retrying...')
                 raise httpx.HTTPStatusError
+            if e.response.status_code == 404:
+                logging.error(
+                    f'''
+                    HTTP error {e.response.status_code}: Wrong endpoint or data does not exist yet
+                    for endpoint "{endpoint}"
+                    '''
+                )
             logging.error(
                 f"HTTP error {e.response.status_code} while requesting {e.request.url!r}: "
                 f"{e.response.text}"
             )
         except Exception as e:
-            logging.error(f"Failed GET request at {self.OPENDOTA_URL}/{endpoint}")
+            logging.error(f"Failed GET request at {self.OPENDOTA_URL}/{endpoint}") 
         
     def get_match(self, match_id, **kwargs):
         #TODO: refactor and optimize
-        db_manager = kwargs.get('db_manager')
-        match = self.client.get(f'{self.OPENDOTA_URL}/matches/{match_id}')
+        db_manager: DatabaseManager = kwargs.get('db_manager')
+        match = self.request(f'matches/{match_id}')
         table_names = [
             'match_details', 'match_death_events', 'match_pick_bans', 'match_tower_deaths', 
             'match_players', 'match_purchases', 'match_runes', 'match_wards'
@@ -92,15 +104,19 @@ class OpenDotaClient(BaseDotaClient):
         }
         for obj in match.get('objectives'):
             if obj['type'] == 'building_kill':
-                try:
-                    attacker = self.heroes[self.heroes['name'] == obj['unit']].get('id').iloc[0]
-                except:
-                    attacker = 'non-hero'
+                attacker = db_manager.get_hero_id_by_name(obj['unit'])
+                if attacker == -1: #Hero ID defaulted to -1, it is an NPC
+                    attacker = db_manager.get_npc_id_by_name(obj['unit'])
+                    if attacker == -1:
+                        logging.warning(f'Unknown ID found in objectives data for unit: {obj['unit']}')
+                npc_id = db_manager.get_npc_id_by_name(obj['key'])
+                if npc_id == -1:
+                    logging.warning(f'Unknown ID found in data for NPC: {obj['key']}')
                 storage['match_tower_deaths'].append(
                     {
                         'match_id': match_id,
                         'time': obj['time'],
-                        'npcId': self.npcs[self.npcs['name'] == obj['key']].get('id').iloc[0],
+                        'npcId': npc_id,
                         'isRadiant': 'goodguys' in obj['key'],
                         'attacker': attacker
                     }
@@ -108,10 +124,9 @@ class OpenDotaClient(BaseDotaClient):
         for p in match['players']:
             hero_id = p['hero_id']
             for kill in p.get('kills_log'):
-                try: 
-                    killed_id = int(self.heroes[self.heroes['name'] == kill['key']].get('id').iloc[0])
-                except:
-                    killed_id = -1
+                killed_id = db_manager.get_hero_id_by_name(kill['key'])
+                if killed_id == -1:
+                    logging.warning(f'Unknown ID found in kill data for unit: {kill['key']}')
                 storage['match_death_events'].append(
                     {
                         'match_id': match_id,
@@ -124,7 +139,10 @@ class OpenDotaClient(BaseDotaClient):
             if (is_radiant and p['team_number'] == 0) or (not is_radiant and p['team_number'] == 1):
                 is_victory = True
             else:
-                is_victory = False           
+                is_victory = False       
+            name = p.get('name')
+            if name == '' or not name:
+                name = 'Unknown'  
             storage['match_players'].append(
                 {
                     'match_id': match_id,
@@ -139,19 +157,22 @@ class OpenDotaClient(BaseDotaClient):
                     'heroDamage': p['hero_damage'],
                     'steamAccountId': p['account_id'],
                     'partyId': p['party_id'],
-                    'name': p['name'],
+                    'name': name,
                     'kills': p['kills'],
                     'deaths': p['deaths'],
-                    'assists': p['assists']
+                    'assists': p.get('assists')
                 }
             )
             for pur in p.get('purchase_log'):
+                item_id = db_manager.get_item_id_by_name(pur['key'])
+                if item_id == -1:
+                    logging.warning(f'Unknown ID found in data for item: {pur['key']}')
                 storage['match_purchases'].append(
                     {
                         'match_id': match_id,
                         'hero_id': hero_id,
                         'time': pur['time'],
-                        'itemId': self.items[self.items['shortName'] == pur['key']].get('id').iloc[0]
+                        'itemId': item_id
                     }
                 )
             for rune in p.get('runes_log'):
@@ -188,21 +209,40 @@ class OpenDotaClient(BaseDotaClient):
         return storage
         
     def is_parsed_match(self, **kwargs):
+        #TODO rewrite with request() method or drop that method and rewrite the other methods
+        match_id = kwargs.get('match_id')
         job_id = kwargs.get('job_id')
-        if not job_id:
-            raise ValueError("OpenDota requires job_id to check status")
-        
-        response = self.client.get(f'{self.OPENDOTA_URL}/request/{job_id}')
-        try:
-            response.raise_for_status()
-            result = response.json()
-            if not result:
-                return True
-            else: 
+        if match_id:
+            try:
+                response = self.client.get(f'{self.OPENDOTA_URL}/matches/{match_id}')
+                if response.status_code == 200:
+                    data = response.json()
+                    if data and data.get('players')[0].get('kills_log'):
+                        return True
                 return False
-        except Exception as e:
-            logging.error(f'Error with response: {e}')
-            return False
+            except Exception as e:
+                logging.warning(f'Failed to check match {match_id} parsing status: {e}')
+                return False
+
+        elif job_id:
+            response = self.client.get(f'{self.OPENDOTA_URL}/request/{job_id}')
+            try:
+                response.raise_for_status()
+                result = response.json()
+                if not result:
+                    return True
+                else: 
+                    return False
+            except Exception as e:
+                logging.error(f'Error with response: {e}')
+                return False
+        
+    def request_parse(self, match_id: int) -> int:
+        job_id = self.request(f'request/{match_id}', method='POST')['job']['jobId']
+        if isinstance(job_id, int):
+            return job_id
+        else:
+            logging.warning(f'API did not return expected job ID')
         
     def get_internal_game_version(self, start_timestamp: int, db_manager: DatabaseManager):
         """
@@ -211,8 +251,5 @@ class OpenDotaClient(BaseDotaClient):
         """
         start_datetime = datetime.fromtimestamp(start_timestamp)
         query = 'SELECT id FROM patches WHERE "asOfDateTime" < :start_datetime LIMIT 1'
-        game_version = db_manager.select(query, params={'start_datetime': start_datetime})[0]
+        game_version = db_manager.select(query, params={'start_datetime': start_datetime})[0][0]
         return game_version
-    
-odc = OpenDotaClient()
-odc.get_match()

@@ -18,3 +18,5 @@ ON match_players(match_id);
 CREATE INDEX IF NOT EXISTS idx_match_players_position 
 ON match_players(position);
 CREATE INDEX idx_mv_networth_position ON mv_match_networth_shares(position);
+
+CREATE UNIQUE INDEX idx_hero_patch_unique ON hero_patch_stats (hero_id, patch);

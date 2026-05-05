@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         env_file='.env', 
         env_file_encoding='utf-8',
         case_sensitive=False,
-        extra='ignore' # Ignores extra variables in .env so it doesn't crash
+        extra='ignore' 
     )
 
     @computed_field

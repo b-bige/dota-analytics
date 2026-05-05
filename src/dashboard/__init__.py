@@ -1,6 +1,6 @@
 from dash import Dash
 from src.database import DatabaseManager
-from src.core.logger import setup_logger\
+from src.core.logger import setup_logger
 
 db_manager = DatabaseManager()
 listener = setup_logger(logfile_path='logs/dashboard.log')

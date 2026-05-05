@@ -44,8 +44,8 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         Input('live-update-timer', 'n_intervals')
 )
 def update_live_ui(n):
-    results = db_manager.select_to_df(
-        "SELECT * FROM live_matches WHERE status <> 'fetched_opendota' AND status <> 'failed_parse' ORDER BY last_updated DESC" 
+    results = db_manager.select_to_df( #TODO Change the active 
+        "SELECT * FROM live_matches WHERE status = 'active' ORDER BY last_updated DESC" 
     )
     if results.empty:
         return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")

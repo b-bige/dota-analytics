@@ -7,6 +7,28 @@ import logging
 from src.database.connection import engine
 
 class DatabaseManager(): 
+    _heroes_map: dict = None
+    _items_map:  dict = None
+    _npcs_map:   dict = None
+
+    def __init__(self):
+        self._initialize_mappings()
+        
+    def _initialize_mappings(self):
+        """
+        Maps the dota short names to respective IDs for handling 
+        the mapping of OpenDota's data to the Database.
+        """
+        if DatabaseManager._heroes_map is None:
+            df = self.select_to_df('SELECT id, name FROM hero_details')
+            DatabaseManager._heroes_map = df.set_index('name')['id'].to_dict()
+        if DatabaseManager._items_map is None:
+            df = self.select_to_df('SELECT id, "shortName" FROM item_details_opendota')
+            DatabaseManager._items_map = df.set_index('shortName')['id'].to_dict()
+        if DatabaseManager._npcs_map is None:
+            df = self.select_to_df('SELECT id, name FROM npcs')
+            DatabaseManager._npcs_map = df.set_index('name')['id'].to_dict()
+
     def select(self, query, params: dict=None):
         with engine.connect() as conn:
             result = conn.execute(text(query), params or {})
@@ -18,11 +40,11 @@ class DatabaseManager():
             df.columns = columns
         return df
     
-    def query_execute(self, query, params: dict=None):
+    def execute(self, query, params: dict=None):
         with engine.begin() as conn:
             conn.execute(text(query), params or {})
 
-    def query_executemany(self, query, params: dict=None):
+    def execute_many(self, query, params: dict=None):
         with engine.begin() as conn:
             conn.execute(text(query), params or {})
 
@@ -74,8 +96,8 @@ class DatabaseManager():
             logging.warning(f"Empty DataFrame passed to insert_df_into_table for '{table_name}' — skipping.")
             return
 
-        df = df.convert_dtypes().copy()
-        clean_df = df.where(pd.notnull(df), other=None).astype(object)
+        clean_df = df.copy().astype(object) #For Driver Compatibility
+        clean_df = clean_df.where(clean_df.notna(), other=None)
 
         for col in jsonb_cols:
             if col in clean_df.columns:
@@ -100,7 +122,7 @@ class DatabaseManager():
 
         try:
             with engine.connect() as sa_conn:
-                raw_conn = sa_conn.connection
+                raw_conn = sa_conn.connection.driver_connection
                 with raw_conn.cursor() as cur:
                     try:
                         cur.execute(f'CREATE TEMP TABLE "{staging_table}" AS SELECT * FROM "{table_name}" LIMIT 0')
@@ -143,3 +165,16 @@ class DatabaseManager():
             return TIMESTAMP
         else:
             return Text
+
+    def get_item_id_by_name(self, name: str) -> int:
+        """Returns the ID corresponding to the Item name."""
+        return DatabaseManager._items_map.get(name, -1)
+
+    def get_hero_id_by_name(self, name: str) -> int:
+        """Returns the ID corresponding to the Hero name."""
+        return DatabaseManager._heroes_map.get(name, -1) 
+    
+    def get_npc_id_by_name(self, name: str) -> int:
+        """Returns the ID corresponding to the NPC name."""
+        return DatabaseManager._npcs_map.get(name, -1)
+    

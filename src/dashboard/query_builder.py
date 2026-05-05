@@ -1,4 +1,5 @@
 class QueryBuilder:
+    """Helper class to apply the filters dynamically for the dashboard"""
     def __init__(self, base_table='match_details md'):
         self.base_table = base_table
         self._joins = {}

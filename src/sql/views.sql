@@ -23,32 +23,6 @@ SELECT
 FROM match_pick_bans mpb
 JOIN hero_details hd ON hd.id = mpb."heroId"
 GROUP BY hd."displayName", hd."shortName";
-CREATE MATERIALIZED VIEW hero_synergy_stats AS
-SELECT 
-    LEAST(mp1."heroId", mp2."heroId")       AS hero1,
-    GREATEST(mp1."heroId", mp2."heroId")    AS hero2,
-    AVG(CAST(mp1."isVictory" AS INT))       AS winrate,
-    COUNT(*)                                AS games
-FROM match_players mp1
-JOIN match_players mp2 
-    ON  mp1.match_id   = mp2.match_id
-    AND mp1."heroId"   < mp2."heroId"
-    AND mp1."isRadiant" = mp2."isRadiant"
-GROUP BY 1, 2
-HAVING COUNT(*) >= 20;
-CREATE MATERIALIZED VIEW hero_counter_stats AS 
-SELECT 
-    mp1."heroId"                            AS hero_id,
-    mp2."heroId"                            AS enemy_id,
-    AVG(CAST(mp1."isVictory" AS INT))       AS winrate,
-    COUNT(*)                                AS games
-FROM match_players mp1
-JOIN match_players mp2
-    ON  mp1.match_id    = mp2.match_id
-    AND mp1."isRadiant" != mp2."isRadiant"
-GROUP BY 1, 2
-HAVING COUNT(*) >= 20;
-
 CREATE MATERIALIZED VIEW mv_match_networth_shares AS
 SELECT 
     mp.match_id,
@@ -68,3 +42,90 @@ JOIN (
     GROUP BY match_id, "isRadiant"
 ) tn ON mp.match_id = tn.match_id AND mp."isRadiant" = tn."isRadiant"
 WHERE mp.position IS NOT NULL;
+
+CREATE MATERIALIZED VIEW hero_patch_stats AS
+-- Patch-specific win
+(SELECT 
+    mp."heroId" AS hero_id,
+    md."gameVersionId" AS patch,
+    SUM(CASE WHEN mp."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp
+JOIN match_details md ON mp.match_id = md.id
+GROUP BY 1, 2)
+UNION ALL
+-- Global win
+(SELECT 
+    mp."heroId" AS hero_id,
+    0 AS patch,
+    SUM(CASE WHEN mp."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp
+GROUP BY 1, 2);
+
+CREATE MATERIALIZED VIEW hero_synergy_stats AS
+-- Patch-Specific Synergy
+SELECT 
+    md."gameVersionId" AS patch,
+    LEAST(mp1."heroId", mp2."heroId") AS hero_a,
+    GREATEST(mp1."heroId", mp2."heroId") AS hero_b,
+    SUM(CASE WHEN mp1."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp1
+JOIN match_players mp2 ON mp1.match_id = mp2.match_id
+JOIN match_details md ON mp1.match_id = md.id
+WHERE mp1."heroId" < mp2."heroId" AND mp1."isRadiant" = mp2."isRadiant"
+GROUP BY 1, 2, 3
+UNION ALL
+-- Global Synergy
+(SELECT 
+    0 AS patch,
+    LEAST(mp1."heroId", mp2."heroId") AS hero_a,
+    GREATEST(mp1."heroId", mp2."heroId") AS hero_b,
+    SUM(CASE WHEN mp1."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp1
+JOIN match_players mp2 ON mp1.match_id = mp2.match_id
+WHERE mp1."heroId" < mp2."heroId" AND mp1."isRadiant" = mp2."isRadiant"
+GROUP BY 1, 2, 3);
+
+CREATE MATERIALIZED VIEW hero_counter_stats AS 
+SELECT 
+    md."gameVersionId" AS patch,
+    mp1."heroId" AS hero_id,
+    mp2."heroId" AS enemy_id,
+    SUM(CASE WHEN mp1."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp1
+JOIN match_players mp2 ON mp1.match_id = mp2.match_id
+JOIN match_details md ON mp1.match_id = md.id
+WHERE mp1."isRadiant" != mp2."isRadiant"
+GROUP BY 1, 2, 3
+HAVING COUNT(*) >= 5;
+
+CREATE MATERIALIZED VIEW hero_counter_stats AS 
+-- Patch-Specific Counters
+(SELECT 
+    md."gameVersionId" AS patch,
+    mp1."heroId" AS hero_id,
+    mp2."heroId" AS enemy_id,
+    SUM(CASE WHEN mp1."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp1
+JOIN match_players mp2 ON mp1.match_id = mp2.match_id
+JOIN match_details md ON mp1.match_id = md.id
+WHERE mp1."isRadiant" != mp2."isRadiant"
+GROUP BY 1, 2, 3)
+
+UNION ALL
+-- Global Counters
+(SELECT 
+    0 AS patch,
+    mp1."heroId" AS hero_id,
+    mp2."heroId" AS enemy_id,
+    SUM(CASE WHEN mp1."isVictory" THEN 1 ELSE 0 END) AS wins,
+    COUNT(*) AS games
+FROM match_players mp1
+JOIN match_players mp2 ON mp1.match_id = mp2.match_id
+WHERE mp1."isRadiant" != mp2."isRadiant"
+GROUP BY 1, 2, 3);
