@@ -6,7 +6,7 @@ from src.database import DatabaseManager
 from src.dashboard.app_functions import *
 from src.dashboard.theme import *
 from src.dashboard.filters import FILTER_IDS, FILTERS
-from src.dashboard import app
+from src.dashboard import app, server
 
 app.layout = dmc.MantineProvider(
     theme=MANTINE_THEME,
