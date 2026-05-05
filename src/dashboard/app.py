@@ -84,6 +84,7 @@ app.layout = dmc.MantineProvider(
         )           
     ]
 )
+server = app.server
 
 @app.callback(
         Output('banner-overview', 'href'),
