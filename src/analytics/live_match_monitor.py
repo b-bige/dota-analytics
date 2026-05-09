@@ -22,11 +22,13 @@ class LiveMatchMonitor:
         db: DatabaseManager, 
         draft_service: DraftService, 
         rating_system: RatingSystem,
+        match_predictor: MatchPredictor,
         opendota_client: OpenDotaClient
     ):
         self.db = db
         self.draft_service = draft_service
         self.rating_service = rating_system
+        self.match_predictor = match_predictor
         self.league_cache = TTLCache(maxsize=100, ttl=3600)
         self.logo_cache = TTLCache(maxsize=500, ttl=86400)
         self.opendota_client = opendota_client
@@ -73,11 +75,12 @@ class LiveMatchMonitor:
         """
         if not live_matches:
             return
-
+        fetched_ids = {r[0] for r in db_manager.select("SELECT match_id FROM live_matches WHERE status = 'fetched_from_opendota'")}
         self._sync_metadata(live_matches)
         match_updates = []
         for match in live_matches:
             match_id = match.get('match_id')
+            if match_id in fetched_ids: continue
             league_id = match.get('league_id') 
             if league_id == 0 or not league_id: continue
             is_finished = match.get('deactivate_time') != 0 
@@ -95,10 +98,12 @@ class LiveMatchMonitor:
             rad_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=0, live=True)
             dire_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=1, live=True)
 
-            if rad_ordinal is not None and dire_ordinal is not None:
-                rad_win_prob = 1 / (1 + 10 ** (-(rad_ordinal - dire_ordinal) / 400))
-            else:
-                rad_win_prob = 0.50
+            rad_win_prob = self.match_predictor.predict_win_probability(
+                draft_strength_rad,
+                draft_strength_dire,
+                rad_ordinal,
+                dire_ordinal
+            )
 
             rad_id = int(match.get('team_id_radiant')) or 0
             dire_id = int(match.get('team_id_dire')) or 0
@@ -170,60 +175,61 @@ class LiveMatchMonitor:
             match_id = getattr(row, 'match_id', None)
             status = getattr(row, 'status', None)
             job_id = getattr(row, 'job_id', None)
-            # try:
-            if status == 'active':
-                if self.opendota_client.is_parsed_match(match_id=match_id):
-                    match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
-                    for table in table_names:
-                        data = match_data.get(table, [])
-                        if type(data) == dict:
-                            accumulated_storage[table].append(data)
-                        else:
-                            accumulated_storage[table].extend(data)
+            try:
+                if status == 'active':
+                    is_parsed = self.opendota_client.is_parsed_match(match_id=match_id)
+                    if self.opendota_client.is_parsed_match(match_id=match_id):
+                        match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
+                        for table in table_names:
+                            data = match_data.get(table, [])
+                            if type(data) == dict:
+                                accumulated_storage[table].append(data)
+                            else:
+                                accumulated_storage[table].extend(data)
+                            
+                        match_ids_to_delete.append(match_id)
+                        continue
+                    if job_id is None:
+                        new_job = self.opendota_client.request_parse(match_id)
+                        logging.info(f"New job_id for match {match_id}: {new_job}") 
+                        update_query = """
+                            UPDATE live_matches 
+                            SET status = 'pending_parse', job_id = :job_id 
+                            WHERE match_id = :match_id
+                        """
+                        self.db.execute(update_query, {"job_id": new_job, "match_id": match_id})
+                        continue
+                    if self.opendota_client.is_parsed_match(job_id=job_id):
+                        match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
+                        for table in table_names:
+                            data = match_data.get(table, [])
+                            if type(data) == dict:
+                                accumulated_storage[table].append(data)
+                            else:
+                                accumulated_storage[table].extend(data)
+                            
+                        match_ids_to_delete.append(match_id)
+                        continue
+                elif status == 'pending_parse':
+                    is_parsed = self.opendota_client.is_parsed_match(job_id=job_id)
+                    if self.opendota_client.is_parsed_match(job_id=job_id):
+                        match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
                         
-                    match_ids_to_delete.append(match_id)
-                    continue
-                if job_id is None:
-                    new_job = self.opendota_client.request_parse(match_id)
-                    logging.info(f"New job_id for match {match_id}: {new_job}")  # add this
-                    update_query = """
-                        UPDATE live_matches 
-                        SET status = 'pending_parse', job_id = :job_id 
-                        WHERE match_id = :match_id
-                    """
-                    self.db.execute(update_query, {"job_id": new_job, "match_id": match_id})
-                    continue
-                if self.opendota_client.is_parsed_match(job_id=job_id):
-                    match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
-                    for table in table_names:
-                        data = match_data.get(table, [])
-                        if type(data) == dict:
-                            accumulated_storage[table].append(data)
-                        else:
-                            accumulated_storage[table].extend(data)
-                        
-                    match_ids_to_delete.append(match_id)
-                    continue
-            elif status == 'pending_parse':
-                if self.opendota_client.is_parsed_match(job_id):
-                    match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
-                    
-                    for table in table_names:
-                        data = match_data.get(table, [])
-                        if type(data) == dict:
-                            accumulated_storage[table].append(data)
-                        else:
-                            accumulated_storage[table].extend(data)
-                        
-                    match_ids_to_delete.append(match_id)
-            # except Exception as e:
-            #     logging.error(f"Error processing finished match {match_id}: {e}")
+                        for table in table_names:
+                            data = match_data.get(table, [])
+                            if type(data) == dict:
+                                accumulated_storage[table].append(data)
+                            else:
+                                accumulated_storage[table].extend(data)
+                            
+                        match_ids_to_delete.append(match_id)
+            except Exception as e:
+                logging.error(f"Error processing finished match {match_id}: {e}")
             
         self._save_parsed_data(accumulated_storage)
-        
         if match_ids_to_delete:
-            delete_query = "DELETE FROM live_matches WHERE match_id = ANY(:match_ids)"
-            self.db.execute(delete_query, {"match_ids": match_ids_to_delete})
+            update_query = "UPDATE live_matches SET status = 'fetched_from_opendota' WHERE match_id = ANY(:match_ids)"
+            self.db.execute(update_query, {"match_ids": match_ids_to_delete})
             logging.info(f"Successfully moved and cleared {len(match_ids_to_delete)} matches.")
 
     def _save_parsed_data(self, storage: dict[str, list]):
@@ -233,17 +239,15 @@ class LiveMatchMonitor:
                 df = pd.DataFrame(records)
                 if 'index' in df.columns:
                     df = df.drop(columns=['index'])
-                if table == 'match_players':
-                    df.to_csv('match_players.csv')
                 self.db.insert_df_into_table(df, table_name=table, conflict_cols=['id'])     
 
     def run_forever(self, interval: float):
         while True:
-            # try:
+            try:
                 all_live = monitor.opendota_client.request('live')
                 self.process_cycle(all_live)
-            # except Exception as e:
-            #     logging.error(f"Live Monitor Error: {e}")
+            except Exception as e:
+                logging.error(f"Live Monitor Error: {e}")
                 time.sleep(interval)
 
 if __name__ == '__main__':
@@ -252,6 +256,7 @@ if __name__ == '__main__':
         db=db_manager, 
         draft_service=DraftService(db_manager),
         rating_system=RatingSystem(db_manager), 
+        match_predictor=MatchPredictor(),
         opendota_client=OpenDotaClient()
     )
     monitor.run_forever(interval=60)

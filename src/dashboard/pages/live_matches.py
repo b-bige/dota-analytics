@@ -4,6 +4,7 @@ import dash_mantine_components as dmc
 import plotly.express as px
 import plotly.graph_objects as go
 from zoneinfo import ZoneInfo
+import numpy as np
 
 import time
 import logging
@@ -64,34 +65,44 @@ def create_live_match_card(row):
     rad_rating = row.get('avg_radiant_rating', None)
     dire_rating = row.get('avg_dire_rating', None)
     if rad_rating:
-        rad_rating = round(rad_rating, 2)
+        rad_rating = np.round(rad_rating, 2)
     else:
         rad_rating = '-'
     if dire_rating:
-        dire_rating = round(dire_rating, 2)
+        dire_rating = np.round(dire_rating, 2)
     else:
         dire_rating = '-'
+    rad_win_predicted = np.round(row.get('rad_win_predicted', 0.5), 2)
+
     return dmc.Paper(
         withBorder=True,
         shadow='sm',
         p='md',
         radius='md',
-        style={"transition": "transform 0.2s ease"},
+        style={
+            'display': 'flex',
+            'flexDirection': 'column',
+            "transition": "transform 0.2s ease"
+        },
         children=[
-            dmc.Group(
-                justify="space-between",
-                mb="md",
+            html.Div(
+                style={'flex': 1},
                 children=[
                     dmc.Group(
+                        justify="space-between",
+                        mb="md",
                         children=[
-                            dmc.Badge(league, variant='outline' if is_unknown_League else 'gradient'),
-                            dmc.Badge('Finished', variant='filled') if row['is_finished'] else None,
+                            dmc.Group(
+                                children=[
+                                    dmc.Badge(league, variant='outline' if is_unknown_League else 'gradient'),
+                                    dmc.Badge('Finished', variant='filled') if row['is_finished'] else None,
+                                ]
+                            ),
+                            dmc.Badge('Radiant Lead' if is_radiant_lead else 'Dire Lead', color=lead_color, variant='filled')
                         ]
-                    ),
-                    dmc.Badge('Radiant Lead' if is_radiant_lead else 'Dire Lead', color=lead_color, variant='filled')
+                    )
                 ]
             ),
-            
             dmc.Group(
                 justify="center", 
                 gap="xl",         
@@ -118,7 +129,8 @@ def create_live_match_card(row):
                                 ),
                             dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
                             dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
-                            dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed")
+                            dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed"),
+                            dmc.Text(f'Win chance: {int(rad_win_predicted * 100)}%', size="xs", c="dimmed")
                         ]
                     ),
                     
@@ -146,21 +158,26 @@ def create_live_match_card(row):
                             ),
                             dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), 
                             dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
-                            dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed")
+                            dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed"),
+                            dmc.Text(f'Win chance: {int(np.round(1 - rad_win_predicted, 2) * 100)}%', size="xs", c="dimmed")
                         ]
                     )
                 ]
             ),
-            
-            dmc.Divider(variant="dashed", my="sm"),
-            
-            dmc.Group(
-                justify="space-between",
+            html.Div(
                 children=[
-                    dmc.Text(f"📅 {start_time}", size="xs", c="dimmed"),
-                    dmc.Text(f"Current⏱️ {game_time}", size="xs", c="dimmed"),
-                    dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
+                    dmc.Divider(variant="dashed", my="sm"),
+            
+                    dmc.Group(
+                        justify="space-between",
+                        children=[
+                            dmc.Text(f"📅 {start_time}", size="xs", c="dimmed"),
+                            dmc.Text(f"Current⏱️ {game_time}", size="xs", c="dimmed"),
+                            dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
+                        ]
+                    )
                 ]
             )
+            
         ]
     )

@@ -3,7 +3,7 @@ from src.core.config import settings
 import logging
 import httpx
 from ratelimit import limits, sleep_and_retry
-from tenacity import retry, wait_exponential, retry_if_exception_type
+from tenacity import retry, wait_exponential, retry_if_exception_type, stop_after_attempt
 from datetime import datetime
 from src.database import DatabaseManager
 
@@ -29,10 +29,13 @@ class OpenDotaClient(BaseDotaClient):
 
     @retry(
         wait=wait_exponential(multiplier=10, min=10, max=100),
+        stop=stop_after_attempt(2), #TODO Change this, API down
         retry=retry_if_exception_type((
             httpx.HTTPError,
             httpx.ConnectError, 
             httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.ReadError
         )),
         before_sleep=lambda retry_state: logging.warning(
             f"OpenDotaClient: Retry attempt {retry_state.attempt_number} after error: {retry_state.outcome.exception()}"
@@ -43,9 +46,9 @@ class OpenDotaClient(BaseDotaClient):
     @limits(calls=3000, period=86400) #Day
     def request(self, endpoint: str, method: str='GET'):
         if method == 'GET':
-            response = self.client.get(f'{self.OPENDOTA_URL}/{endpoint}') 
+            response = self.client.get(f'{self.OPENDOTA_URL}/{endpoint}', timeout=30) 
         elif method == 'POST':
-            response = self.client.post(f'{self.OPENDOTA_URL}/{endpoint}')
+            response = self.client.post(f'{self.OPENDOTA_URL}/{endpoint}', timeout=30)
         else:
             raise ValueError('Unknown method passed')
         try:
@@ -68,7 +71,7 @@ class OpenDotaClient(BaseDotaClient):
                 f"{e.response.text}"
             )
         except Exception as e:
-            logging.error(f"Failed GET request at {self.OPENDOTA_URL}/{endpoint}") 
+            logging.error(f"Failed {method} request at {self.OPENDOTA_URL}/{endpoint}") 
         
     def get_match(self, match_id, **kwargs):
         #TODO: refactor and optimize
@@ -209,7 +212,6 @@ class OpenDotaClient(BaseDotaClient):
         return storage
         
     def is_parsed_match(self, **kwargs):
-        #TODO rewrite with request() method or drop that method and rewrite the other methods
         match_id = kwargs.get('match_id')
         job_id = kwargs.get('job_id')
         if match_id:
@@ -225,8 +227,8 @@ class OpenDotaClient(BaseDotaClient):
                 return False
 
         elif job_id:
-            response = self.client.get(f'{self.OPENDOTA_URL}/request/{job_id}')
             try:
+                response = self.client.get(f'{self.OPENDOTA_URL}/request/{job_id}')
                 response.raise_for_status()
                 result = response.json()
                 if not result:
