@@ -129,12 +129,3 @@ FROM match_players mp1
 JOIN match_players mp2 ON mp1.match_id = mp2.match_id
 WHERE mp1."isRadiant" != mp2."isRadiant"
 GROUP BY 1, 2, 3);
-
-SELECT * FROM live_matches WHERE match_id = 8805293764;
-SELECT * FROM match_details WHERE id = 8805293764;
-
-SELECT match_id, status, job_id, avg_radiant_rating, avg_dire_rating, radiant_draft_score, dire_draft_score
-            FROM live_matches 
-            WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
-               OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
-               OR (status = 'pending_parse');

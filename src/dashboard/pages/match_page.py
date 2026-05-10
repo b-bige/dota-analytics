@@ -10,12 +10,12 @@ vs_logo = dmc.Avatar(
     "VS",
     radius="xl",
     size="lg",
-    color="yellow", # Dota gold
+    color="yellow", 
     variant="filled",
     style={
         "fontWeight": 900,
         "fontSize": "1.2rem",
-        "boxShadow": "0 0 15px rgba(255, 193, 7, 0.3)", # Subtle glow
+        "boxShadow": "0 0 15px rgba(255, 193, 7, 0.3)",
         "border": "2px solid #2C2E33"
     }
 )
@@ -28,16 +28,16 @@ def layout(match_id=None, **kwargs):
     return render_match_page(match_id)
 
 def render_match_page(match_id):
-    query = 'SELECT "didRadiantWin", "radiantTeamId", "direTeamId" FROM match_details WHERE id = %s'
-    rad_win, rad_team_id, dire_team_id = db_manager.select(query, params=(match_id, ))[0]
-    query = 'SELECT name, logo FROM team_details WHERE id = %s'
-    rad = db_manager.select(query, params=(rad_team_id, ))
-    dire = db_manager.select(query, params=(dire_team_id, ))
-    logo_query = 'SELECT logo_url FROM team_logos WHERE team_id = %s'
+    query = 'SELECT "didRadiantWin", "radiantTeamId", "direTeamId" FROM match_details WHERE id = :match_id'
+    rad_win, rad_team_id, dire_team_id = db_manager.select(query, params={'match_id': match_id})[0]
+    query = 'SELECT name, logo FROM team_details WHERE id = :team_id'
+    rad = db_manager.select(query, params={'team_id': rad_team_id})
+    dire = db_manager.select(query, params={'team_id': dire_team_id})
+    logo_query = 'SELECT logo_url FROM team_logos WHERE team_id = :team_id'
     try:
         if rad:
-            rad_name = rad[0]
-            rad_logo = rad[1]
+            rad_name = rad[0][0]
+            rad_logo = rad[0][1]
         else:
             rad_name = f'Radiant ID: {rad_team_id}'
             rad_logo = ''
@@ -46,13 +46,13 @@ def render_match_page(match_id):
         rad_logo = ''
     if not rad_logo:
         try:
-            rad_logo = db_manager.select(logo_query, params=(rad_team_id, ))[0]
+            rad_logo = db_manager.select(logo_query, params={'team_id': rad_team_id})[0]
         except:
             rad_logo = '/assets/no_image.svg'
     try:
         if dire:
-            dire_name = dire[0]
-            dire_logo = dire[1]
+            dire_name = dire[0][0]
+            dire_logo = dire[0][1]
         else:
             dire_name = f'Dire ID: {dire_team_id}'
             dire_logo = ''
@@ -61,7 +61,7 @@ def render_match_page(match_id):
         dire_logo = ''
     if not dire_logo:
         try:
-            dire_logo = db_manager.select(logo_query, params=(dire_team_id, ))[0]
+            dire_logo = db_manager.select(logo_query, params={'team_id': dire_team_id})[0]
         except:
             dire_logo = '/assets/no_image.svg'
     query = '''
@@ -91,7 +91,7 @@ def render_match_page(match_id):
         FROM hero_details hd
         INNER JOIN match_players mp
         ON mp."heroId" = hd.id
-        WHERE mp."match_id" = %s
+        WHERE mp."match_id" = :match_id
         ORDER BY 
             mp."isRadiant" DESC, -- Radiant players grouped first
             CASE 
@@ -112,7 +112,7 @@ def render_match_page(match_id):
             END ASC,
             mp.position ASC
     '''
-    players_list = db_manager.select(query, params=(match_id, ))
+    players_list = db_manager.select(query, params={'match_id': match_id})
     result_color = COLORS['radiant'] if rad_win else COLORS['dire']
     return dmc.Container(size="xl", fluid=True, children=[
         dmc.Grid(gutter="md", children=[
@@ -142,7 +142,6 @@ def render_match_page(match_id):
             dmc.GridCol(span=12, children=[
                 dmc.Stack([
                     dmc.Text("Radiant", fw=700, c="green"),
-
                     create_match_table(players_list[:5], True)
                 ])
             ]),
