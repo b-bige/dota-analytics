@@ -128,6 +128,7 @@ def render_meta_layout():
 def render_economy_layout():
     return [
         dmc.Grid(
+            id='economy-layout-grid',
             children=[
                 dmc.GridCol(
                     span=3,
@@ -136,7 +137,7 @@ def render_economy_layout():
                             id={'type': 'dynamic-select', 'index': 'gpm-heroes-select'},
                             label='Heroes',
                             placeholder='Select Heroes for Analysis',
-                            data=HERO_LIST,
+                            data=list(HERO_LIST),
                             value=['Abaddon'],
                             maxValues=10,
                             persistence=True,     
@@ -169,6 +170,7 @@ def render_economy_layout():
             ]
         ),
         dmc.SimpleGrid(
+            id='economy-graph-grid',
             cols={"base": 1, "lg": 2},
             children=[
                 dcc.Loading(

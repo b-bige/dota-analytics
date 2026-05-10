@@ -29,7 +29,7 @@ class HeroesFilter(Filter):
             id='heroes-filter',
             label='Heroes',
             placeholder='Select Heroes',
-            data=HERO_LIST,
+            data=list(HERO_LIST),
             value=value,
             searchable=True
         )
