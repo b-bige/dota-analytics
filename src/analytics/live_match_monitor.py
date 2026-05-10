@@ -157,7 +157,6 @@ class LiveMatchMonitor:
             WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
                OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
                OR (status = 'pending_parse')
-               OR (is_finished)
         """
         finished_matches = self.db.select_to_df(query)
         if finished_matches.empty:
