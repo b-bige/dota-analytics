@@ -15,7 +15,7 @@ class HeroesFilter(Filter):
             if value[0] and not exclude:
                 qb.join('mp', 'INNER JOIN match_players mp ON mp.match_id = md.id')
                 qb.join('hd', 'RIGHT JOIN hero_details hd ON hd.id = mp."heroId"')
-                qb.where('hd."displayName" = ANY(:value)', {'value': value})
+                qb.where('hd."displayName" = ANY(:hero)', {'hero': value})
         return qb
     
     def to_url_params(self, value):

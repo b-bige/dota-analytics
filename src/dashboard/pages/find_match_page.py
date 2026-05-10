@@ -110,6 +110,7 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
         'rad_rating', 'dire_rating', 'radiant_draft_score', 'dire_draft_score'
     ]
     matches = [dict(zip(columns, row)) for row in db_manager.select(query, params=params)]
+    print(query, params)
     if len(matches) == 0:
         return dmc.Paper(dmc.Text('No matches found')), 0, 1
     elements = [create_match_element(row) for row in matches]

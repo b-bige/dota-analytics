@@ -13,7 +13,7 @@ class LeagueFilter(Filter):
         if value:
             if value[0] and not exclude:
                 qb.join('ld', 'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
-                qb.where('ld."displayName" = ANY(:value)', {'value': value})
+                qb.where('ld."displayName" = ANY(:league)', {'league': value})
         return qb
     
     def to_url_params(self, value):
