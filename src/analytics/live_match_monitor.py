@@ -259,4 +259,4 @@ if __name__ == '__main__':
         match_predictor=MatchPredictor(),
         opendota_client=OpenDotaClient()
     )
-    monitor.run_forever(interval=60)
+    monitor.run_forever(interval=180)

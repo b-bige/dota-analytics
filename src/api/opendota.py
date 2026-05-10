@@ -58,7 +58,7 @@ class OpenDotaClient(BaseDotaClient):
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 logging.warning(f'Rate limit exceeded: retrying...')
-                raise httpx.HTTPStatusError
+                raise e
             if e.response.status_code == 404:
                 logging.error(
                     f'''
