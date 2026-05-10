@@ -21,3 +21,6 @@ wheels/
 
 # Cache
 **/cache/
+*.db
+*.db-shm
+*.db-wal
