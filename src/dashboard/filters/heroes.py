@@ -1,17 +1,12 @@
 from .base import Filter
 import dash_mantine_components as dmc
 from src.dashboard.query_builder import QueryBuilder
+from src.dashboard.data_assets import HERO_LIST
 
 class HeroesFilter(Filter):
     filter_name = 'heroes'
     component_id = 'heroes-filter'
-    def __init__(self):
-        self.heroes = self.get_heroes()
 
-    def get_heroes(self):
-        query = 'SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC'
-        return [r[0] for r in self.db.select(query)]
-    
     def parse_from_url(self, params):
         return params.get(self.filter_name, None)
     
@@ -34,7 +29,7 @@ class HeroesFilter(Filter):
             id='heroes-filter',
             label='Heroes',
             placeholder='Select Heroes',
-            data=self.heroes,
+            data=HERO_LIST,
             value=value,
             searchable=True
         )

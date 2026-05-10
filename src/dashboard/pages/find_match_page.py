@@ -9,14 +9,6 @@ from src.dashboard import db_manager
 from src.dashboard.app_functions import *
 from src.dashboard.filters import *
 
-vs_logo = dmc.Avatar(
-    "VS",
-    radius="xl",
-    size="lg",
-    color=COLORS['primary'],
-    variant="filled"
-)
-
 dash.register_page(__name__, path='/find-match')
 
 def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):

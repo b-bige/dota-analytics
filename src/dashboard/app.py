@@ -5,8 +5,8 @@ from urllib.parse import urlencode, parse_qs
 from src.database import DatabaseManager
 from src.dashboard.app_functions import *
 from src.dashboard.theme import *
-from src.dashboard.filters import FILTER_IDS, FILTERS
 from src.dashboard import app, server
+from src.dashboard.filters import FILTER_IDS, FILTERS
 
 app.layout = dmc.MantineProvider(
     theme=MANTINE_THEME,
@@ -61,6 +61,12 @@ app.layout = dmc.MantineProvider(
                                                     id='navbar-live-matches',
                                                     href='/live-matches',
                                                     style={'textDecoration': 'none', 'color': 'inherit'}
+                                                ),
+                                                dcc.Link(
+                                                    dmc.TabsTab('Draft Analysis', value='draft-analysis'),
+                                                    id='navbar-draft-builder',
+                                                    href='/draft-analysis',
+                                                    style={'textDecoration': 'none', 'color': 'inherit'}
                                                 )
                                             ],
                                             justify='flex-start',
@@ -107,6 +113,8 @@ def set_tab(pathname):
         return 'find-match'
     elif pathname == '/live-matches': 
         return 'live-matches'
+    elif pathname == '/draft-analysis':
+        return 'draft-analysis'
 
 @app.callback(
         Output(component_id='header-badge', component_property='children'),

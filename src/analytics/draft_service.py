@@ -1,69 +1,76 @@
 import logging
 import numpy as np
 import pandas as pd
+import os
+from diskcache import Cache
 from cachetools import TTLCache, cached
 from src.database import DatabaseManager 
 
 class DraftService:
-    def __init__(self, db: DatabaseManager, refresh_interval: int = 3600):
+    def __init__(self, db: DatabaseManager, cache_dir='cache/draft_stats', refresh_interval: int = 3600):
         self.db = db
         self._refresh_interval = refresh_interval
-        self._hero_stats = TTLCache(maxsize=1, ttl=refresh_interval)
-        self._synergy_stats = TTLCache(maxsize=1, ttl=refresh_interval)
-        self._counter_stats = TTLCache(maxsize=1, ttl=refresh_interval)
-        
+        os.makedirs(cache_dir, exist_ok=True)
+        self._cache = Cache(cache_dir)
         self._global_winrate = 0.50
 
     def _apply_smoothing(self, wins: float, total: int, prior_weight: int = 5) -> float:
         return (wins + (prior_weight * self._global_winrate)) / (total + prior_weight)
     
-    def _get_hero_stats(self) -> dict[tuple[int, int], float]:
-        """Fetch individual hero winrates from the materialized view and apply Bayesian smoothing."""
-        if 'data' not in self._hero_stats:
-            query = "SELECT hero_id, patch, wins, games FROM hero_patch_stats"
-            df = self.db.select_to_df(query)
-            
-            df['wins'] = df['wins'].astype(int)
-            df['games'] = df['games'].astype(int)
-            
-            df['smoothed_wr'] = df.apply(
-                lambda x: self._apply_smoothing(x['wins'], x['games']), axis=1
-            )
-            self._hero_stats['data'] = df.set_index(['hero_id', 'patch'])['smoothed_wr'].to_dict()
-            
-        return self._hero_stats['data']
+    def _get_cached_stat(self, key, fetch_func):
+        val = self._cache.get(key)
+        if val is None:
+            val = fetch_func()
+            self._cache.set(key, val, expire=self._refresh_interval)
+        return val
     
-    def _get_synergy_stats(self) -> dict[tuple[int, int, int], float]:
-        """Fetch and smooth pairwise synergy metrics."""
-        if 'data' not in self._synergy_stats:
-            query = "SELECT patch, hero_a, hero_b, wins, games FROM hero_synergy_stats"
-            df = self.db.select_to_df(query)
-            
-            df['wins'] = df['wins'].astype(int)
-            df['games'] = df['games'].astype(int)
-            
-            df['smoothed_score'] = df.apply(
-                lambda x: self._apply_smoothing(x['wins'], x['games']), axis=1
-            )
-            self._synergy_stats['data'] = df.set_index(['patch', 'hero_a', 'hero_b'])['smoothed_score'].to_dict()
-            
-        return self._synergy_stats['data']
+    def _get_hero_stats(self):
+        return self._get_cached_stat('hero_stats', self._fetch_hero_stats)
+
+    def _get_synergy_stats(self):
+        return self._get_cached_stat('synergy_stats', self._fetch_synergy_stats)
+
+    def _get_counter_stats(self):
+        return self._get_cached_stat('counter_stats', self._fetch_counter_stats)
     
-    def _get_counter_stats(self) -> dict[tuple[int, int, int], float]:
-        """Fetch and smooth counter matchup metrics."""
-        if 'data' not in self._counter_stats:
-            query = "SELECT patch, hero_id, enemy_id, wins, games FROM hero_counter_stats"
-            df = self.db.select_to_df(query)
-            
-            df['wins'] = df['wins'].astype(int)
-            df['games'] = df['games'].astype(int)
-            
-            df['smoothed_score'] = df.apply(
-                lambda x: self._apply_smoothing(x['wins'], x['games']), axis=1
-            )
-            self._counter_stats['data'] = df.set_index(['patch', 'hero_id', 'enemy_id'])['smoothed_score'].to_dict()
-            
-        return self._counter_stats['data']
+    def _fetch_hero_stats(self) -> dict[tuple[int, int], float]:
+        """Fetch individual hero winrates and apply Bayesian smoothing."""
+        query = "SELECT hero_id, patch, wins, games FROM hero_patch_stats"
+        df = self.db.select_to_df(query)
+        
+        df['wins'] = df['wins'].astype(int)
+        df['games'] = df['games'].astype(int)
+        
+        df['smoothed_wr'] = df.apply(
+            lambda x: self._apply_smoothing(x['wins'], x['games']), axis=1
+        )
+        return df.set_index(['hero_id', 'patch'])['smoothed_wr'].to_dict()
+    
+    def _fetch_synergy_stats(self) -> dict[tuple[int, int, int], float]:
+        """Fetch pairwise synergy metrics and apply Bayesian smoothing."""
+        query = "SELECT patch, hero_a, hero_b, wins, games FROM hero_synergy_stats"
+        df = self.db.select_to_df(query)
+        
+        df['wins'] = df['wins'].astype(int)
+        df['games'] = df['games'].astype(int)
+        
+        df['smoothed_score'] = df.apply(
+            lambda x: self._apply_smoothing(x['wins'], x['games']), axis=1
+        )
+        return df.set_index(['patch', 'hero_a', 'hero_b'])['smoothed_score'].to_dict()
+    
+    def _fetch_counter_stats(self) -> dict[tuple[int, int, int], float]:
+        """Fetch counter matchup metrics and apply Bayesian smoothing"""
+        query = "SELECT patch, hero_id, enemy_id, wins, games FROM hero_counter_stats"
+        df = self.db.select_to_df(query)
+        
+        df['wins'] = df['wins'].astype(int)
+        df['games'] = df['games'].astype(int)
+        
+        df['smoothed_score'] = df.apply(
+            lambda x: self._apply_smoothing(x['wins'], x['games']), axis=1
+        )
+        return df.set_index(['patch', 'hero_id', 'enemy_id'])['smoothed_score'].to_dict()
     
     def compute_draft_strength(
         self,

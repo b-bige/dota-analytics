@@ -16,10 +16,9 @@ from src.dashboard.app_functions import *
 from src.dashboard.filters import *
 from src.dashboard import db_manager
 from src.dashboard.query_builder import QueryBuilder
+from src.dashboard.data_assets import HERO_DICT, HERO_LIST
 
 dash.register_page(__name__, path='')
-
-_all_heroes = [r[0] for r in db_manager.select('SELECT "displayName" FROM hero_details ORDER BY "displayName" ASC')]
 
 def layout(**kwargs):
     return dmc.Tabs(
@@ -137,7 +136,7 @@ def render_economy_layout():
                             id={'type': 'dynamic-select', 'index': 'gpm-heroes-select'},
                             label='Heroes',
                             placeholder='Select Heroes for Analysis',
-                            data=_all_heroes,
+                            data=HERO_LIST,
                             value=['Abaddon'],
                             maxValues=10,
                             persistence=True,     
