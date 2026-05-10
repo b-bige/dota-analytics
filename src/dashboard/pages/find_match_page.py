@@ -167,6 +167,7 @@ def create_match_element(row: dict):
                         gap="xl",         
                         children=[
                             dmc.Stack(align="center", gap=0, children=[
+                                dmc.Text('Radiant', fw=700, c=COLORS['radiant']),
                                 dmc.Paper(
                                     shadow="xs",
                                     radius="md",
@@ -191,6 +192,7 @@ def create_match_element(row: dict):
                             dmc.Text("VS", fw=900, size="lg", c="dimmed"),
                             
                             dmc.Stack(align="center", gap=0, children=[
+                                dmc.Text('Dire', fw=700, c=COLORS['dire']),
                                 dmc.Paper(
                                     shadow="xs",
                                     radius="md",

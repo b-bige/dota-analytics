@@ -152,7 +152,7 @@ class LiveMatchMonitor:
         and stores them in the database, and deletes them from live_matches when saved.
         """
         query = """
-            SELECT match_id, status, job_id 
+            SELECT match_id, status, job_id, avg_radiant_rating, avg_dire_rating, radiant_draft_score, dire_draft_score
             FROM live_matches 
             WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
                OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
@@ -174,6 +174,10 @@ class LiveMatchMonitor:
             match_id = getattr(row, 'match_id', None)
             status = getattr(row, 'status', None)
             job_id = getattr(row, 'job_id', None)
+            avg_radiant_rating = getattr(row, 'avg_radiant_rating', None)
+            avg_dire_rating = getattr(row, 'avg_dire_rating', None)
+            radiant_draft_score = getattr(row, 'radiant_draft_score', None)
+            dire_draft_score = getattr(row, 'dire_draft_score', None)
             try:
                 if status == 'active':
                     is_parsed = self.opendota_client.is_parsed_match(match_id=match_id)
@@ -181,11 +185,20 @@ class LiveMatchMonitor:
                         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
                         for table in table_names:
                             data = match_data.get(table, [])
-                            if type(data) == dict:
+                            if table == 'match_details':
+                                data.update(
+                                    {
+                                        'avg_radiant_rating': avg_radiant_rating,
+                                        'avg_dire_rating': avg_dire_rating,
+                                        'radiant_draft_score': radiant_draft_score,
+                                        'dire_draft_score': dire_draft_score
+                                    }
+                                )
+                                accumulated_storage[table].append(data)
+                            elif type(data) == dict:
                                 accumulated_storage[table].append(data)
                             else:
-                                accumulated_storage[table].extend(data)
-                            
+                                accumulated_storage[table].extend(data)  
                         match_ids_to_delete.append(match_id)
                         continue
                     if job_id is None:
@@ -224,7 +237,7 @@ class LiveMatchMonitor:
                         match_ids_to_delete.append(match_id)
             except Exception as e:
                 logging.error(f"Error processing finished match {match_id}: {e}")
-            
+        print(match_ids_to_delete)
         self._save_parsed_data(accumulated_storage)
         if match_ids_to_delete:
             update_query = "UPDATE live_matches SET status = 'fetched_from_opendota' WHERE match_id = ANY(:match_ids)"
@@ -245,6 +258,7 @@ class LiveMatchMonitor:
             try:
                 all_live = monitor.opendota_client.request('live')
                 self.process_cycle(all_live)
+                time.sleep(interval)
             except Exception as e:
                 logging.error(f"Live Monitor Error: {e}")
                 time.sleep(interval)

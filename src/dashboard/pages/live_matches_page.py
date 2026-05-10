@@ -112,6 +112,7 @@ def create_live_match_card(row):
                         gap=0, 
                         w=150, 
                         children=[
+                            dmc.Text('Radiant', fw=700, c=COLORS['radiant']),
                             dmc.Paper(
                                     shadow="xs",
                                     radius="md",
@@ -141,6 +142,7 @@ def create_live_match_card(row):
                         gap=0, 
                         w=150, 
                         children=[
+                            dmc.Text('Dire', fw=700, c=COLORS['dire']),
                             dmc.Paper(
                                 shadow="xs",
                                 radius="md",
