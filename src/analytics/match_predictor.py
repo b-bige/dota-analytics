@@ -21,5 +21,5 @@ class MatchPredictor:
             'draft_diff':     radiant_draft_score - dire_draft_score
         }]).fillna(0)
 
-        prob = self._win_model.predict_proba(features.values)[0][1] 
+        prob = self._win_model.predict(features.values)[0][1] 
         return float(prob)

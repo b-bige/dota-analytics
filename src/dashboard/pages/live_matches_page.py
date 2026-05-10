@@ -73,6 +73,12 @@ def create_live_match_card(row):
     else:
         dire_rating = '-'
     rad_win_predicted = np.round(row.get('rad_win_predicted', 0.5), 2)
+    if rad_win_predicted >= 0.5:
+        predicted_team = 'Radiant'
+        predicted_color = COLORS['radiant']
+    else:
+        predicted_team = 'Dire'
+        predicted_color = COLORS['dire']
 
     return dmc.Paper(
         withBorder=True,
@@ -118,7 +124,7 @@ def create_live_match_card(row):
                                     radius="md",
                                     p=5,
                                     withBorder=True,
-                                    bg="white", # Forces a background so transparent logos are visible
+                                    bg="white", 
                                     children=[
                                         dmc.Image(
                                             src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
@@ -128,10 +134,9 @@ def create_live_match_card(row):
                                         )
                                     ]
                                 ),
-                            dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center"), # ta="center" is key
+                            dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center"),
                             dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
                             dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed"),
-                            dmc.Text(f'Win chance: {int(rad_win_predicted * 100)}%', size="xs", c="dimmed")
                         ]
                     ),
                     
@@ -148,7 +153,7 @@ def create_live_match_card(row):
                                 radius="md",
                                 p=5,
                                 withBorder=True,
-                                bg="white", # Forces a background so transparent logos are visible
+                                bg="white",
                                 children=[
                                     dmc.Image(
                                         src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
@@ -161,7 +166,6 @@ def create_live_match_card(row):
                             dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center"), 
                             dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
                             dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed"),
-                            dmc.Text(f'Win chance: {int(np.round(1 - rad_win_predicted, 2) * 100)}%', size="xs", c="dimmed")
                         ]
                     )
                 ]
@@ -177,9 +181,18 @@ def create_live_match_card(row):
                             dmc.Text(f"Current⏱️ {game_time}", size="xs", c="dimmed"),
                             dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
                         ]
+                    ),
+                    dmc.Divider(variant="dashed", my="sm"),
+                    html.Div(
+                        style={
+                            'display': 'flex',
+                            'justifyContent': 'center'
+                        },
+                        children=[
+                            dmc.Text(f'Prediction: {predicted_team} victory', fw=700, c=predicted_color),
+                        ]
                     )
                 ]
-            )
-            
+            )        
         ]
     )
