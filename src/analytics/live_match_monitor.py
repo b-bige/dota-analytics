@@ -255,13 +255,13 @@ class LiveMatchMonitor:
 
     def run_forever(self, interval: float):
         while True:
-            # try:
-            all_live = monitor.opendota_client.request('live')
-            self.process_cycle(all_live)
-            time.sleep(interval)
-        # except Exception as e:
-            logging.error(f"Live Monitor Error: {e}")
-            time.sleep(interval)
+            try:
+                all_live = monitor.opendota_client.request('live')
+                self.process_cycle(all_live)
+                time.sleep(interval)
+            except Exception as e:
+                logging.error(f"Live Monitor Error: {e}")
+                time.sleep(interval)
 
 if __name__ == '__main__':
     db_manager = DatabaseManager()
