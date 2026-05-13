@@ -119,7 +119,6 @@ def process_match(match_id, players_df, radiant_win):
     if len(radiant) == 0 or len(dire) == 0:
         return
 
-    # Get or create player IDs for all players in the match
     radiant_ids = []
     for _, row in radiant.iterrows():
         pid = get_or_create_player_id(row['steamAccountId'], match_id, row['heroId'])

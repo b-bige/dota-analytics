@@ -46,6 +46,9 @@ def map_match_times_to_patch_ids(patch_rows: list[tuple], match_times: np.ndarra
 
 def process_batch(db: DatabaseManager, ds: DraftService, batch: list[int]) -> None:
     """Processes a batch of matches and updates draft scores in the database."""
+    winrate_map = ds._get_hero_stats() 
+    synergy_map = ds._get_synergy_stats()
+    counter_map = ds._get_counter_stats()
     players_query = '''
         SELECT md.id AS match_id,
                mp."heroId" AS hero_id,
@@ -106,9 +109,18 @@ def process_batch(db: DatabaseManager, ds: DraftService, batch: list[int]) -> No
         
         radiant_list = row['radiant_heroes'] if isinstance(row['radiant_heroes'], list) else []
         dire_list = row['dire_heroes'] if isinstance(row['dire_heroes'], list) else []
-
-        radiant_score = ds.compute_draft_strength(radiant_list, dire_list, patch_id)
-        dire_score = ds.compute_draft_strength(dire_list, radiant_list, patch_id)
+        radiant_score = ds.compute_draft_strength(
+            radiant_list, 
+            dire_list, 
+            patch_id,
+            stats_maps=(winrate_map, synergy_map, counter_map)
+        )
+        dire_score = ds.compute_draft_strength(
+            dire_list, 
+            radiant_list, 
+            patch_id,
+            stats_maps=(winrate_map, synergy_map, counter_map)
+        )
         rows.append((radiant_score, dire_score, mid))
 
     if rows:

@@ -142,4 +142,4 @@ LEFT JOIN patches p ON md."gameVersionId" = p.id LEFT JOIN league_details ld ON 
 WHERE 1=1 AND (p.name = ANY(:value)) AND (ld."displayName" = ANY(:value))
 
 ORDER BY md."startDateTimeHuman" DESC LIMIT :page_size OFFSET :offset
-         {'value': ['ESL One Fall 2021 powered by Intel'], 'page_size': 20, 'offset': 0}
+         {'value': ['ESL One Fall 2021 powered by Intel'], 'page_size': 20, 'offset': 0};

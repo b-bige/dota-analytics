@@ -11,7 +11,7 @@ class DraftService:
         self.db = db
         self._refresh_interval = refresh_interval
         os.makedirs(cache_dir, exist_ok=True)
-        self._cache = Cache(cache_dir)
+        self._cache = Cache(cache_dir, timeout=refresh_interval)
         self._global_winrate = 0.50
 
     def _apply_smoothing(self, wins: float, total: int, prior_weight: int = 5) -> float:
@@ -22,6 +22,7 @@ class DraftService:
         if val is None:
             val = fetch_func()
             self._cache.set(key, val, expire=self._refresh_interval)
+            return val
         return val
     
     def _get_hero_stats(self):
@@ -72,30 +73,36 @@ class DraftService:
         )
         return df.set_index(['patch', 'hero_id', 'enemy_id'])['smoothed_score'].to_dict()
     
-    def compute_draft_strength(
-        self,
-        team_heroes: list[int],
-        enemy_heroes: list[int],
-        patch: int,
-        weights: dict[str, float] = None
-    ) -> float:
-        """Computes a draft score by evaluating individual hero winrates, synergy, and counter-picks."""
-        weights = weights or {"winrate": 0.40, "synergy": 0.35, "counter": 0.25}
-        
-        stats = self._get_hero_stats()
-        hero_scores = [
-            stats.get((h, patch), stats.get((h, 0), 0.50)) 
-            for h in team_heroes
-        ]
-        wr_score = np.mean(hero_scores) if hero_scores else 0.50
-        synergy_score = self._calculate_synergy(team_heroes, patch)
-        counter_score = self._calculate_counters(team_heroes, enemy_heroes, patch)
+    def compute_draft_strength(self, team_heroes, enemy_heroes, patch, weights=None, stats_maps=None):
+        weights = weights or [0.40, 0.35, 0.25]
 
-        return float(
-            weights["winrate"] * wr_score + 
-            weights["synergy"] * synergy_score + 
-            weights["counter"] * counter_score
-        )
+        if stats_maps:
+            winrate_map, synergy_map, counter_map = stats_maps
+        else:
+            winrate_map = self._get_hero_stats()
+            synergy_map = self._get_synergy_stats()
+            counter_map = self._get_counter_stats()
+
+        hero_scores = [winrate_map.get((h, patch), winrate_map.get((h, 0), 0.5)) for h in team_heroes]
+        wr_score = sum(hero_scores) / len(hero_scores) if hero_scores else 0.5
+
+        syn_total = 0
+        syn_count = 0
+        for i, h1 in enumerate(team_heroes):
+            for h2 in team_heroes[i+1:]:
+                h_low, h_high = (h1, h2) if h1 < h2 else (h2, h1)
+                score = synergy_map.get((patch, h_low, h_high), synergy_map.get((0, h_low, h_high), 0.5))
+                syn_total += score
+                syn_count += 1
+        synergy_score = syn_total / syn_count if syn_count > 0 else 0.5
+
+        cnt_total = 0
+        for h in team_heroes:
+            for e in enemy_heroes:
+                cnt_total += counter_map.get((patch, h, e), counter_map.get((0, h, e), 0.5))
+        counter_score = cnt_total / 25
+
+        return (weights[0] * wr_score) + (weights[1] * synergy_score) + (weights[2] * counter_score)
     
     def _calculate_synergy(self, team_heroes: list[int], patch: int) -> float:
         stats = self._get_synergy_stats()
