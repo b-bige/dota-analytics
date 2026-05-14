@@ -252,6 +252,6 @@ class OpenDotaClient(BaseDotaClient):
         from an Unix timestamp relating to the start of the game.
         """
         start_datetime = datetime.fromtimestamp(start_timestamp)
-        query = 'SELECT id FROM patches WHERE "asOfDateTime" < :start_datetime LIMIT 1'
+        query = 'SELECT id FROM patches WHERE "asOfDateTime" < :start_datetime ORDER BY "asOfDateTime" DESC LIMIT 1'
         game_version = db_manager.select(query, params={'start_datetime': start_datetime})[0][0]
         return game_version
