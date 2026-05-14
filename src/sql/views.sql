@@ -129,17 +129,3 @@ FROM match_players mp1
 JOIN match_players mp2 ON mp1.match_id = mp2.match_id
 WHERE mp1."isRadiant" != mp2."isRadiant"
 GROUP BY 1, 2, 3);
-
-SELECT 
-md.id, md."radiantTeamId", md."direTeamId",
-md."didRadiantWin", md."durationSeconds", md."startDateTimeHuman",
-radiant.name, dire.name, radiant.logo, dire.logo, ld."displayName", 
-md.avg_radiant_rating, md.avg_dire_rating, 
-md.radiant_draft_score, md.dire_draft_score
-
-FROM match_details md
-LEFT JOIN patches p ON md."gameVersionId" = p.id LEFT JOIN league_details ld ON md."leagueId" = ld.id LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId" LEFT JOIN team_details dire ON dire.id = md."direTeamId"
-WHERE 1=1 AND (p.name = ANY(:value)) AND (ld."displayName" = ANY(:value))
-
-ORDER BY md."startDateTimeHuman" DESC LIMIT :page_size OFFSET :offset
-         {'value': ['ESL One Fall 2021 powered by Intel'], 'page_size': 20, 'offset': 0};

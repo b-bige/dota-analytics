@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     stratz_api_key:    str
     stratz_url:        str = 'https://api.stratz.com/graphql'
     opendota_url:      str = 'https://api.opendota.com/api'
+    cache_dir:         str = 'cache/draft_stats'
 
     model_config = SettingsConfigDict(
         env_file='.env', 

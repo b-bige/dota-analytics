@@ -20,7 +20,6 @@ model = PlackettLuce(tau=TAU)
 
 player_ratings = {}
 rating_history = []
-next_anon_id = 0
 
 def main():
     """
@@ -29,38 +28,47 @@ def main():
     - rating_history: the ratings for players before each match
     Used to apply different rating model setups to retrain models.
     """
-    global next_anon_id
     log.info(
         f'Starting rating calculation with tau: {TAU}'
     )
-    
-    log.info("Loading metadata...")
-    metadata = db.select_to_df('SELECT * FROM match_details')
-    metadata = metadata.sort_values(by='startDateTimeHuman', ascending=True).reset_index(drop=True)
-
-    radiant_win_lookup = dict(zip(metadata['id'], metadata['didRadiantWin']))
-
-    valid_mids = [
-        mid[0] for mid in db.select(
-            '''SELECT match_id AS players
-                FROM match_players
-                GROUP BY match_id
-                HAVING COUNT(DISTINCT "heroId") = 10;'''
+    query = ''' 
+        SELECT id, "startDateTimeHuman", "didRadiantWin" 
+        FROM match_details 
+        WHERE id IN (
+            SELECT match_id 
+            FROM match_players 
+            GROUP BY match_id
+            HAVING COUNT(DISTINCT "heroId") = 10
         )
-    ]
-    log.info(f"{len(valid_mids):,} matches have correct player data.")
+        ORDER BY "startDateTimeHuman" ASC;
+    '''
+    log.info("Loading metadata...")
+    metadata = db.select_to_df(query)
+
 
     BATCH_SIZE = 1000
-    total = len(valid_mids)
+    total = len(metadata)
     for i in range(0, total, BATCH_SIZE):
-        batch = valid_mids[i:i + BATCH_SIZE]
-        players_df = db.select_to_df(
-            'SELECT * FROM match_players WHERE match_id = ANY(:match_ids)',
-            params={'match_ids': batch},
-        )
-        for match_id, group in players_df.groupby('match_id'):
-            radiant_win = radiant_win_lookup.get(match_id)
+        batch_meta = metadata.iloc[i:i + BATCH_SIZE]
+        batch_ids = batch_meta['id'].tolist()
+        radiant_win_lookup = {int(k): v for k, v in zip(batch_meta['id'], batch_meta['didRadiantWin'])}
 
+        players_df = db.select_to_df(
+            '''
+            SELECT match_id, "heroId", "isRadiant", "steamAccountId"
+            FROM match_players 
+            WHERE match_id = ANY(:match_ids)
+            ''',
+            params={'match_ids': batch_ids},
+        )
+        grouped = {match_id: group for match_id, group in players_df.groupby('match_id')}
+        for match_id in batch_ids:
+            group = grouped.get(match_id)
+            if group is None or group.empty:
+                log.warning(f"Match {match_id} not found in metadata, skipping.")
+                continue
+                
+            radiant_win = radiant_win_lookup.get(match_id)
             if radiant_win is None:
                 log.warning(f"Match {match_id} not found in metadata, skipping.")
                 continue
@@ -92,15 +100,8 @@ def main():
 
 
 def get_or_create_player_id(account_id, match_id, hero_id):
-    """
-    Returns existing account_id if valid, otherwise creates and returns a new anonymous ID.
-    Also initializes the player in player_ratings if not already present.
-    """
-    global next_anon_id
-    
-    if pd.isna(account_id) or account_id <= 0:
+    if account_id is None or account_id <= 0:
         anon_id = f'anon_{match_id}_{hero_id}'
-        next_anon_id += 1
     else:
         anon_id = int(account_id)
     
@@ -113,21 +114,22 @@ def process_match(match_id, players_df, radiant_win):
     """
     Process a single match: append to rating history, calculate ratings, update player ratings.
     """
-    radiant = players_df[players_df['isRadiant'] == True].copy()
-    dire = players_df[players_df['isRadiant'] == False].copy()
+    players = players_df.to_dict('records')
+    
+    radiant_records = [p for p in players if p['isRadiant']]
+    dire_records = [p for p in players if not p['isRadiant']]
 
-    if len(radiant) == 0 or len(dire) == 0:
+    if not radiant_records or not dire_records:
         return
 
-    radiant_ids = []
-    for _, row in radiant.iterrows():
-        pid = get_or_create_player_id(row['steamAccountId'], match_id, row['heroId'])
-        radiant_ids.append(pid)
-
-    dire_ids = []
-    for _, row in dire.iterrows():
-        pid = get_or_create_player_id(row['steamAccountId'], match_id, row['heroId'])
-        dire_ids.append(pid)
+    radiant_ids = [
+        get_or_create_player_id(p['steamAccountId'], match_id, p['heroId']) 
+        for p in radiant_records
+    ]
+    dire_ids = [
+        get_or_create_player_id(p['steamAccountId'], match_id, p['heroId']) 
+        for p in dire_records
+    ]
 
     radiant_ratings = [player_ratings[pid] for pid in radiant_ids]
     dire_ratings = [player_ratings[pid] for pid in dire_ids]
@@ -156,10 +158,14 @@ def process_match(match_id, players_df, radiant_win):
 
     if radiant_win:
         new_radiant, new_dire = model.rate([radiant_ratings, dire_ratings])
+        updated_ids = radiant_ids + dire_ids
+        updated_ratings = new_radiant + new_dire
     else:
         new_dire, new_radiant = model.rate([dire_ratings, radiant_ratings])
+        updated_ids = dire_ids + radiant_ids
+        updated_ratings = new_dire + new_radiant
 
-    for pid, new_r in zip(radiant_ids + dire_ids, new_radiant + new_dire):
+    for pid, new_r in zip(updated_ids, updated_ratings):
         player_ratings[pid] = new_r
 
 if __name__ == '__main__':

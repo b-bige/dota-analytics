@@ -5,9 +5,10 @@ import os
 from diskcache import Cache
 from cachetools import TTLCache, cached
 from src.database import DatabaseManager 
+from src.core.config import settings
 
 class DraftService:
-    def __init__(self, db: DatabaseManager, cache_dir='cache/draft_stats', refresh_interval: int = 3600):
+    def __init__(self, db: DatabaseManager, cache_dir=settings.cache_dir, refresh_interval: int = 3600):
         self.db = db
         self._refresh_interval = refresh_interval
         os.makedirs(cache_dir, exist_ok=True)
