@@ -6,6 +6,7 @@ from ratelimit import limits, sleep_and_retry
 from tenacity import retry, wait_exponential, retry_if_exception_type, stop_after_attempt
 from datetime import datetime
 from src.database import DatabaseManager
+import time
 
 class OpenDotaClient(BaseDotaClient):
     """
@@ -58,6 +59,7 @@ class OpenDotaClient(BaseDotaClient):
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 logging.warning(f'Rate limit exceeded: retrying...')
+                time.sleep(60)
                 raise e
             if e.response.status_code == 404:
                 logging.error(

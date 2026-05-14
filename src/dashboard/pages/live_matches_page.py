@@ -72,13 +72,18 @@ def create_live_match_card(row):
         dire_rating = np.round(dire_rating, 2)
     else:
         dire_rating = '-'
-    rad_win_predicted = np.round(row.get('rad_win_predicted', 0.5), 2)
-    if rad_win_predicted >= 0.5:
-        predicted_team = 'Radiant'
-        predicted_color = COLORS['radiant']
+    rad_win_predicted = row.get('rad_win_predicted', None)
+    if not np.isnan(rad_win_predicted):
+        rad_win_predicted = np.round(rad_win_predicted, 2)
+        if rad_win_predicted >= 0.5:
+            predicted_team = 'Radiant'
+            predicted_color = COLORS['radiant']
+        else:
+            predicted_team = 'Dire'
+            predicted_color = COLORS['dire']
+        prediction_text = dmc.Text(f'Prediction: {predicted_team} victory', fw=700, c=predicted_color)
     else:
-        predicted_team = 'Dire'
-        predicted_color = COLORS['dire']
+        prediction_text = dmc.Text(f'Updating model...', fw=700, c=COLORS['text_bright'])
 
     return dmc.Paper(
         withBorder=True,
@@ -189,7 +194,7 @@ def create_live_match_card(row):
                             'justifyContent': 'center'
                         },
                         children=[
-                            dmc.Text(f'Prediction: {predicted_team} victory', fw=700, c=predicted_color),
+                            prediction_text
                         ]
                     )
                 ]

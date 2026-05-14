@@ -157,6 +157,7 @@ class LiveMatchMonitor:
             WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
                OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
                OR (status = 'pending_parse')
+               OR (status = 'pending_parse_no_jobid)
         """
         finished_matches = self.db.select_to_df(query)
         if finished_matches.empty:
@@ -179,8 +180,7 @@ class LiveMatchMonitor:
             radiant_draft_score = getattr(row, 'radiant_draft_score', None)
             dire_draft_score = getattr(row, 'dire_draft_score', None)
             try:
-                if status == 'active':
-                    is_parsed = self.opendota_client.is_parsed_match(match_id=match_id)
+                if status == 'active' or status == 'pending_parse_no_jobid':
                     if self.opendota_client.is_parsed_match(match_id=match_id):
                         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
                         for table in table_names:
@@ -223,7 +223,6 @@ class LiveMatchMonitor:
                         match_ids_to_delete.append(match_id)
                         continue
                 elif status == 'pending_parse':
-                    is_parsed = self.opendota_client.is_parsed_match(job_id=job_id)
                     if self.opendota_client.is_parsed_match(job_id=job_id):
                         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
                         
@@ -254,14 +253,18 @@ class LiveMatchMonitor:
                 self.db.insert_df_into_table(df, table_name=table, conflict_cols=['id'])     
 
     def run_forever(self, interval: float):
+        current_interval = 300
+        max_interval = 600
         while True:
             try:
                 all_live = monitor.opendota_client.request('live')
+                current_interval = interval
                 self.process_cycle(all_live)
                 time.sleep(interval)
             except Exception as e:
                 logging.error(f"Live Monitor Error: {e}")
-                time.sleep(interval)
+                time.sleep(current_interval)
+                current_interval = min(current_interval + 60, max_interval)
 
 if __name__ == '__main__':
     db_manager = DatabaseManager()

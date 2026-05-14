@@ -114,5 +114,3 @@ FROM match_players mp1
 JOIN match_players mp2 ON mp1.match_id = mp2.match_id
 WHERE mp1."isRadiant" != mp2."isRadiant"
 GROUP BY 1, 2, 3);
-
-SELECT * FROM patches ORDER BY "asOfDateTime" ASC;
