@@ -9,7 +9,7 @@
 ### 📊 Performance Highlights
 * **204k+** matches processed
 * **73k+** players rated
-* **71%** prediction accuracy on unseen data
+* **58.8%** prediction accuracy on unseen data
 
 ---
 
