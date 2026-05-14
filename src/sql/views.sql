@@ -88,21 +88,6 @@ FROM match_players mp1
 JOIN match_players mp2 ON mp1.match_id = mp2.match_id
 WHERE mp1."heroId" < mp2."heroId" AND mp1."isRadiant" = mp2."isRadiant"
 GROUP BY 1, 2, 3);
-
-CREATE MATERIALIZED VIEW hero_counter_stats AS 
-SELECT 
-    md."gameVersionId" AS patch,
-    mp1."heroId" AS hero_id,
-    mp2."heroId" AS enemy_id,
-    SUM(CASE WHEN mp1."isVictory" THEN 1 ELSE 0 END) AS wins,
-    COUNT(*) AS games
-FROM match_players mp1
-JOIN match_players mp2 ON mp1.match_id = mp2.match_id
-JOIN match_details md ON mp1.match_id = md.id
-WHERE mp1."isRadiant" != mp2."isRadiant"
-GROUP BY 1, 2, 3
-HAVING COUNT(*) >= 5;
-
 CREATE MATERIALIZED VIEW hero_counter_stats AS 
 -- Patch-Specific Counters
 (SELECT 
@@ -129,3 +114,5 @@ FROM match_players mp1
 JOIN match_players mp2 ON mp1.match_id = mp2.match_id
 WHERE mp1."isRadiant" != mp2."isRadiant"
 GROUP BY 1, 2, 3);
+
+SELECT * FROM patches ORDER BY "asOfDateTime" ASC;

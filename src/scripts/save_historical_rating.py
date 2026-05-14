@@ -42,6 +42,7 @@ def main():
         ''',
         params=params
     )
+    db.insert_df_into_table(df, 'rating_history')
 
 if __name__ == '__main__':
     main()
