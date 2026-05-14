@@ -9,7 +9,7 @@
 ### 📊 Performance Highlights
 * **204k+** matches processed
 * **73k+** players rated
-* **71%** prediction accuracy on unseen data
+* **58.8%** prediction accuracy on unseen data
 
 ---
 
@@ -18,6 +18,13 @@
 * **Draft Logic:** Scores synergy, counters, and hero win rates.
 * **ML Pipeline:** Logistic regression model using draft and player skill differential.
 * **Live Monitor:** `systemd` service polling OpenDota every 3 mins with exponential backoff and persistent **DiskCache** for cross-process state.
+
+---
+
+### 🧠 Architecture & Data Integrity
+* **Point-in-Time Simulation:** Enforces a strict *Snapshot-then-Update* loop during training data generation. Features for match $N$ are computed using exclusively historical context from matches $1$ to $N-1$, ensuring zero look-ahead bias or data leakage.
+* **In-Memory Streaming:** Migrated high-overhead $O(N^2)$ hero synergy and counter matrix calculations from database window functions to native Python streaming dictionaries (`defaultdict`), reducing server disk overhead and accelerating pipeline execution.
+* **Hierarchical Cold-Start Handling:** Implemented a patch-aware state manager using Bayesian smoothing. The engine dynamically blends current patch data, previous patch data, and global priors to gracefully handle meta shifts on day one of new game updates.
 
 ---
 
