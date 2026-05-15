@@ -4,8 +4,10 @@ from collections import defaultdict
 import pyarrow.parquet as pq
 from src.database import DatabaseManager
 
-ALPHA = 20  
-MIN_PATCH_GAMES = 50 
+raw_alpha = input('Enter ALPHA (default 20): ')
+ALPHA = int(raw_alpha) if raw_alpha else 20
+raw_min_patch_games = input('Enter MIN_PATCH_GAMES (default 50): ')
+MIN_PATCH_GAMES = int(raw_min_patch_games) if raw_min_patch_games else 50 
 
 class StateManager:
     def __init__(self):
@@ -123,4 +125,4 @@ if __name__ == '__main__':
     df_raw = df_matches_sorted.groupby('match_id').apply(aggregate_match).reset_index()
     df_final = process_matches(df_raw)
     print('Saving to parquet...')
-    df_final.to_parquet('data/training_set_v1.parquet')
+    df_final.to_parquet(f'data/alpha_{ALPHA}_min_patchgames_{MIN_PATCH_GAMES}.parquet')

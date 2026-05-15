@@ -73,7 +73,9 @@ def create_live_match_card(row):
     else:
         dire_rating = '-'
     rad_win_predicted = row.get('rad_win_predicted', None)
-    if not np.isnan(rad_win_predicted):
+    if not rad_win_predicted:
+        prediction_text = dmc.Text(f'Updating model...', fw=700, c=COLORS['text_bright'])
+    else:
         rad_win_predicted = np.round(rad_win_predicted, 2)
         if rad_win_predicted >= 0.5:
             predicted_team = 'Radiant'
@@ -82,8 +84,6 @@ def create_live_match_card(row):
             predicted_team = 'Dire'
             predicted_color = COLORS['dire']
         prediction_text = dmc.Text(f'Prediction: {predicted_team} victory', fw=700, c=predicted_color)
-    else:
-        prediction_text = dmc.Text(f'Updating model...', fw=700, c=COLORS['text_bright'])
 
     return dmc.Paper(
         withBorder=True,

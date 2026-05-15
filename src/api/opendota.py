@@ -99,7 +99,7 @@ class OpenDotaClient(BaseDotaClient):
         game_version = self.get_internal_game_version(start_timestamp, db_manager)
         storage['match_details'] = {
             'id': match_id, 'tournamentId': match.get('tournament_id'), 'tournamentRound': match.get('tournament_round'),
-            'leagueId': match['leagueid'], 'radiantTeamId': match.get('radiant_team_id'), 'direTeamId': match.get('dire_team_id'),
+            'leagueId': match['leagueid'], 'radiantTeamId': int(match.get('radiant_team_id', -1)), 'direTeamId': int(match.get('dire_team_id', -1)),
             'seriesId': match['series_id'], 'clusterId': match['cluster'], 'didRadiantWin': match['radiant_win'],
             'startDateTime': start_timestamp, 'endDateTime': match['start_time'] + match['duration'], 'durationSeconds': match['duration'],
             'firstBloodTime': match['first_blood_time'], 'towerStatusRadiant': match['tower_status_radiant'], 'towerStatusDire': match['tower_status_dire'],

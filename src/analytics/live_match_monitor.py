@@ -15,6 +15,7 @@ from src.analytics.match_predictor import MatchPredictor
 from src.analytics.draft_service import DraftService
 from src.analytics.rating_system import RatingSystem
 from cachetools import TTLCache
+from openskill.models import PlackettLuce, PlackettLuceRating
 
 class LiveMatchMonitor:
     def __init__(
@@ -73,6 +74,7 @@ class LiveMatchMonitor:
         """
         Processes a cycle of live matches, combines computed data, and prepares for bulk upsert.
         """
+        #TODO: Optimize the code for the ratings: now the ratings get pulled twice
         if not live_matches:
             return
         fetched_ids = {r[0] for r in db_manager.select("SELECT match_id FROM live_matches WHERE status = 'fetched_from_opendota'")}
@@ -90,19 +92,42 @@ class LiveMatchMonitor:
             if not self.draft_service.draft_is_complete(match):
                 continue
 
+            ### Model feature: mu_diff
+            rad_player_ids = [p['hero_id'] for p in match.get('players', []) if p.get('team') == 0]
+            dire_player_ids = [p['hero_id'] for p in match.get('players', []) if p.get('team') == 1]
+            rad_ratings = self.rating_service.get_ratings(rad_player_ids)
+            dire_ratings = self.rating_service.get_ratings(dire_player_ids)
+            radiant_mus = np.array([r.mu for r in rad_ratings.values()])
+            dire_mus = np.array([r.mu for r in dire_ratings.values()])
+            mu_diff = np.mean(radiant_mus) - np.mean(dire_mus)
+
+            ### Model feature: std_diff
+            std_diff = np.std(radiant_mus) - np.std(dire_mus)
+
+            ### Model feature: max_mu_diff
+            max_mu_diff = np.max(radiant_mus) - np.max(dire_mus)
+
+            ### Model feature: sigma_total_diff
+            radiant_sigma = np.array([r.sigma for r in rad_ratings.values()])
+            dire_sigma = np.array([r.sigma for r in dire_ratings.values()])
+            sigma_total_diff = np.sum(radiant_sigma) - np.sum(dire_sigma)
+
+            ### Model feature: draft_diff
             rad_heroes, dire_heroes = self.draft_service.get_draft(match, live=True)
             patch = self.opendota_client.get_internal_game_version(match.get('activate_time'), self.db)
             draft_strength_rad = self.draft_service.compute_draft_strength(rad_heroes, dire_heroes, patch)
             draft_strength_dire = self.draft_service.compute_draft_strength(dire_heroes, rad_heroes, patch)
+            draft_diff = draft_strength_rad - draft_strength_dire
 
             rad_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=0, live=True)
             dire_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=1, live=True)
 
             rad_win_prob = self.match_predictor.predict_win_probability(
-                draft_strength_rad,
-                draft_strength_dire,
-                rad_ordinal,
-                dire_ordinal
+                mu_diff=mu_diff,
+                std_diff=std_diff,
+                max_mu_diff=max_mu_diff,
+                sigma_total_diff=sigma_total_diff,
+                draft_diff=draft_diff
             )
 
             rad_id = int(match.get('team_id_radiant')) or 0
@@ -157,7 +182,6 @@ class LiveMatchMonitor:
             WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
                OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
                OR (status = 'pending_parse')
-               OR (status = 'pending_parse_no_jobid)
         """
         finished_matches = self.db.select_to_df(query)
         if finished_matches.empty:
@@ -180,7 +204,7 @@ class LiveMatchMonitor:
             radiant_draft_score = getattr(row, 'radiant_draft_score', None)
             dire_draft_score = getattr(row, 'dire_draft_score', None)
             try:
-                if status == 'active' or status == 'pending_parse_no_jobid':
+                if status == 'active' or status == 'pending_parse':
                     if self.opendota_client.is_parsed_match(match_id=match_id):
                         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
                         for table in table_names:
@@ -201,39 +225,41 @@ class LiveMatchMonitor:
                                 accumulated_storage[table].extend(data)  
                         match_ids_to_delete.append(match_id)
                         continue
-                    if job_id is None:
-                        new_job = self.opendota_client.request_parse(match_id)
-                        logging.info(f"New job_id for match {match_id}: {new_job}") 
-                        update_query = """
-                            UPDATE live_matches 
-                            SET status = 'pending_parse', job_id = :job_id 
-                            WHERE match_id = :match_id
-                        """
-                        self.db.execute(update_query, {"job_id": new_job, "match_id": match_id})
-                        continue
-                    if self.opendota_client.is_parsed_match(job_id=job_id):
-                        match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
-                        for table in table_names:
-                            data = match_data.get(table, [])
-                            if type(data) == dict:
-                                accumulated_storage[table].append(data)
-                            else:
-                                accumulated_storage[table].extend(data)
+                #NOTE: This part is commented out because I ran into rate limiting issues. Requesting a parse counts
+                #NOTE: 10x as much than a simple match request, and for now this feature is dropped.
+                #     if job_id is None:
+                #         # new_job = self.opendota_client.request_parse(match_id)
+                #         # logging.info(f"New job_id for match {match_id}: {new_job}") 
+                #         # update_query = """
+                #         #     UPDATE live_matches 
+                #         #     SET status = 'pending_parse', job_id = :job_id 
+                #         #     WHERE match_id = :match_id
+                #         # """
+                #         # self.db.execute(update_query, {"job_id": new_job, "match_id": match_id})
+                #         # continue
+                #     if self.opendota_client.is_parsed_match(job_id=job_id):
+                #         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
+                #         for table in table_names:
+                #             data = match_data.get(table, [])
+                #             if type(data) == dict:
+                #                 accumulated_storage[table].append(data)
+                #             else:
+                #                 accumulated_storage[table].extend(data)
                             
-                        match_ids_to_delete.append(match_id)
-                        continue
-                elif status == 'pending_parse':
-                    if self.opendota_client.is_parsed_match(job_id=job_id):
-                        match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
+                #         match_ids_to_delete.append(match_id)
+                #         continue
+                # elif status == 'pending_parse':
+                #     if self.opendota_client.is_parsed_match(job_id=job_id):
+                #         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
                         
-                        for table in table_names:
-                            data = match_data.get(table, [])
-                            if type(data) == dict:
-                                accumulated_storage[table].append(data)
-                            else:
-                                accumulated_storage[table].extend(data)
+                #         for table in table_names:
+                #             data = match_data.get(table, [])
+                #             if type(data) == dict:
+                #                 accumulated_storage[table].append(data)
+                #             else:
+                #                 accumulated_storage[table].extend(data)
                             
-                        match_ids_to_delete.append(match_id)
+                #         match_ids_to_delete.append(match_id)
             except Exception as e:
                 logging.error(f"Error processing finished match {match_id}: {e}")
         print(match_ids_to_delete)
