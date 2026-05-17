@@ -133,9 +133,12 @@ class LiveMatchMonitor:
             rad_id = int(match.get('team_id_radiant')) or 0
             dire_id = int(match.get('team_id_dire')) or 0
             start_time = datetime.fromtimestamp(match.get('activate_time', datetime.now())) #TODO Replace now
+            league_name = self.league_cache.get(match.get('league_id'), {}).get('league_name')
+            if not league_name:
+                league_name = self.fetch_league_details(league_id)
             match_updates.append({
                 'match_id': match_id,
-                'league_id': match.get('league_id'),
+                'league_id': league_id,
                 'league_name': self.league_cache.get(match.get('league_id'), {}).get('league_name', 'Unknown'),
                 'start_date_time': start_time,
                 'radiant_id': rad_id,
@@ -167,9 +170,17 @@ class LiveMatchMonitor:
         
         self.handle_finished()
 
-    def load_leagues_cache(self):
-        """Loads the needed league details into a dictionary for optimized performance."""
-        self.leagues_cache = {row[0]: row[1] for row in self.db.select('SELECT id, "displayName" FROM league_details')}
+    def fetch_league_details(self, league_id):
+        league_details = self.opendota_client.request(f'leagues/{league_id}')
+        query = 'INSERT INTO league_details (id, "displayName", tier) VALUES (:league_id, :league_name, :tier)'
+        params = {
+            'league_id': league_details['leagueid'],
+            'league_name': league_details['name'],
+            'tier': str(league_details['tier']).upper()
+        }
+        self.league_cache[league_details['leagueid']] = {'league_name': league_details['name']}
+        self.db.execute(query, params=params)
+        return league_details['name']
 
     def handle_finished(self): 
         """
