@@ -188,7 +188,8 @@ class LiveMatchMonitor:
             logging.info("No finished matches found to process.")
             return
         
-        match_ids_to_delete = []
+        match_ids_fetched = []
+        match_ids_missing_detail = []
         table_names = [
             'match_details', 'match_death_events', 'match_pick_bans', 'match_tower_deaths', 
             'match_players', 'match_purchases', 'match_runes', 'match_wards'
@@ -203,28 +204,28 @@ class LiveMatchMonitor:
             avg_dire_rating = getattr(row, 'avg_dire_rating', None)
             radiant_draft_score = getattr(row, 'radiant_draft_score', None)
             dire_draft_score = getattr(row, 'dire_draft_score', None)
+            #TODO: Get rid of try-catch, find why no detail
             try:
                 if status == 'active' or status == 'pending_parse':
-                    if self.opendota_client.is_parsed_match(match_id=match_id):
-                        match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
-                        for table in table_names:
-                            data = match_data.get(table, [])
-                            if table == 'match_details':
-                                data.update(
-                                    {
-                                        'avg_radiant_rating': avg_radiant_rating,
-                                        'avg_dire_rating': avg_dire_rating,
-                                        'radiant_draft_score': radiant_draft_score,
-                                        'dire_draft_score': dire_draft_score
-                                    }
-                                )
-                                accumulated_storage[table].append(data)
-                            elif type(data) == dict:
-                                accumulated_storage[table].append(data)
-                            else:
-                                accumulated_storage[table].extend(data)  
-                        match_ids_to_delete.append(match_id)
-                        continue
+                    match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
+                    for table in table_names:
+                        data = match_data.get(table, [])
+                        if table == 'match_details':
+                            data.update(
+                                {
+                                    'avg_radiant_rating': avg_radiant_rating,
+                                    'avg_dire_rating': avg_dire_rating,
+                                    'radiant_draft_score': radiant_draft_score,
+                                    'dire_draft_score': dire_draft_score
+                                }
+                            )
+                            accumulated_storage[table].append(data)
+                        elif type(data) == dict:
+                            accumulated_storage[table].append(data)
+                        else:
+                            accumulated_storage[table].extend(data)  
+                    match_ids_fetched.append(match_id)
+                    continue
                 #NOTE: This part is commented out because I ran into rate limiting issues. Requesting a parse counts
                 #NOTE: 10x as much than a simple match request, and for now this feature is dropped.
                 #     if job_id is None:
@@ -261,13 +262,16 @@ class LiveMatchMonitor:
                             
                 #         match_ids_to_delete.append(match_id)
             except Exception as e:
+                match_ids_missing_detail.append(match_id)
                 logging.error(f"Error processing finished match {match_id}: {e}")
-        print(match_ids_to_delete)
         self._save_parsed_data(accumulated_storage)
-        if match_ids_to_delete:
+        if match_ids_fetched:
             update_query = "UPDATE live_matches SET status = 'fetched_from_opendota' WHERE match_id = ANY(:match_ids)"
-            self.db.execute(update_query, {"match_ids": match_ids_to_delete})
-            logging.info(f"Successfully moved and cleared {len(match_ids_to_delete)} matches.")
+            self.db.execute(update_query, {'match_ids': match_ids_fetched})
+        if match_ids_missing_detail:
+            update_query = "UPDATE live_matches SET status = 'missing_detail' WHERE match_id = ANY(:match_ids)"
+            self.db.execute(update_query, {'match_ids': match_ids_missing_detail})
+        logging.info(f"Successfully moved and cleared {len(match_ids_fetched) + len(match_ids_missing_detail)} matches.")
 
     def _save_parsed_data(self, storage: dict[str, list]):
         """Saves aggregated data into respective tables."""

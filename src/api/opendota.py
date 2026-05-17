@@ -220,9 +220,7 @@ class OpenDotaClient(BaseDotaClient):
             try:
                 response = self.client.get(f'{self.OPENDOTA_URL}/matches/{match_id}')
                 if response.status_code == 200:
-                    data = response.json()
-                    if data and data.get('players')[0].get('kills_log'):
-                        return True
+                    return True
                 return False
             except Exception as e:
                 logging.warning(f'Failed to check match {match_id} parsing status: {e}')
