@@ -68,6 +68,13 @@ class OpenDotaClient(BaseDotaClient):
                     for endpoint "{endpoint}"
                     '''
                 )
+            if e.response.status_code == 522:
+                logging.error(
+                    f'''
+                    API server timeout for endpoint "{endpoint}"
+                    '''
+                )
+                raise e
             logging.error(
                 f"HTTP error {e.response.status_code} while requesting {e.request.url!r}: "
                 f"{e.response.text}"

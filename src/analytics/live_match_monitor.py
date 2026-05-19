@@ -303,7 +303,7 @@ class LiveMatchMonitor:
                 self.process_cycle(all_live)
                 time.sleep(interval)
             except Exception as e:
-                logging.error(f"Live Monitor Error: {e}")
+                logging.error(f"Live Monitor Error: {e}. cooling down for {current_interval}s")
                 time.sleep(current_interval)
                 current_interval = min(current_interval + 60, max_interval)
 
