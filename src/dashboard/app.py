@@ -62,12 +62,13 @@ app.layout = dmc.MantineProvider(
                                                     href='/live-matches',
                                                     style={'textDecoration': 'none', 'color': 'inherit'}
                                                 ),
-                                                dcc.Link(
-                                                    dmc.TabsTab('Draft Analysis', value='draft-analysis'),
-                                                    id='navbar-draft-builder',
-                                                    href='/draft-analysis',
-                                                    style={'textDecoration': 'none', 'color': 'inherit'}
-                                                )
+                                                #NOTE: Unfinished pipeline
+                                                # dcc.Link(
+                                                #     dmc.TabsTab('Draft Analysis', value='draft-analysis'),
+                                                #     id='navbar-draft-builder',
+                                                #     href='/draft-analysis',
+                                                #     style={'textDecoration': 'none', 'color': 'inherit'}
+                                                # )
                                             ],
                                             justify='flex-start',
                                             gap="xl", 
