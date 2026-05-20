@@ -193,7 +193,8 @@ class LiveMatchMonitor:
             WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
                OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
                OR (status = 'pending_parse')
-        """
+            ORDER BY start_date_time ASC
+        """ #NOTE: Ascending order for proper chronological rating calculation
         finished_matches = self.db.select_to_df(query)
         if finished_matches.empty:
             logging.info("No finished matches found to process.")
@@ -279,6 +280,8 @@ class LiveMatchMonitor:
         if match_ids_fetched:
             update_query = "UPDATE live_matches SET status = 'fetched_from_opendota' WHERE match_id = ANY(:match_ids)"
             self.db.execute(update_query, {'match_ids': match_ids_fetched})
+            for mid_fetched in match_ids_fetched:
+                self.rating_service.update_ratings_from_match(mid_fetched)
         if match_ids_missing_detail:
             update_query = "UPDATE live_matches SET status = 'missing_detail' WHERE match_id = ANY(:match_ids)"
             self.db.execute(update_query, {'match_ids': match_ids_missing_detail})
