@@ -26,5 +26,5 @@ wheels/
 *.db-wal
 
 # Local scratchpads and debug files
-**/debug.ipynb
 .ipynb_checkpoints/
+**/debug.*
