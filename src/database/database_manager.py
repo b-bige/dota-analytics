@@ -51,7 +51,8 @@ class DatabaseManager():
     def insert_df_into_table(self, df: pd.DataFrame, table_name: str,
                           conflict_cols: list = [],
                           update_cols: list | None = None,
-                          jsonb_cols: list = []) -> None:
+                          jsonb_cols: list = [],
+                          avoid_cols: list | None = None) -> None:
         """
         Bulk-inserts or upserts a DataFrame into a PostgreSQL table using COPY.
 
@@ -67,14 +68,18 @@ class DatabaseManager():
         table_name : str
             Target PostgreSQL table name.
         conflict_cols : list, optional
-            Columns forming the conflict target for upsert. If empty, plain
+            Columns forming the conflict target for upsert. If empty, a plain
             INSERT is used with no conflict handling.
         update_cols : list or None, optional
-            Columns to update on conflict. If None, all non-conflict columns
-            are updated. Only relevant when conflict_cols is provided.
+            Columns to update on conflict. If None, defaults to all non-conflict columns. 
+            Only relevant when conflict_cols is provided.
         jsonb_cols : list, optional
             Columns to serialize as JSON strings for insertion into JSONB
             columns. PostgreSQL handles the string-to-JSONB cast automatically.
+        avoid_cols : list or None, optional
+            Columns to exclude from the update phase on conflict. These columns will 
+            be filtered out of both `update_cols` or the default non-conflict columns list. 
+            Only relevant when conflict_cols is provided.
 
         Notes
         -----
@@ -110,13 +115,19 @@ class DatabaseManager():
 
         upsert_clause = ""
         if conflict_cols:
-            cols_to_update = update_cols or [c for c in col_names if c not in conflict_cols]
+            if update_cols:
+                cols_to_update = update_cols 
+            else:
+                cols_to_update = [c for c in col_names if c not in conflict_cols]
+            if avoid_cols:
+                cols_to_update = [c for c in cols_to_update if c not in avoid_cols]
             if cols_to_update:
-                update_stmt      = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols_to_update)
+                update_stmt     = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols_to_update)
                 conflict_target  = ", ".join(f'"{c}"' for c in conflict_cols)
                 upsert_clause    = f"ON CONFLICT ({conflict_target}) DO UPDATE SET {update_stmt}"
             else:
-                upsert_clause = f"ON CONFLICT ({', '.join(f'{c}' for c in conflict_cols)}) DO NOTHING"
+                conflict_target  = ", ".join(f'"{c}"' for c in conflict_cols)
+                upsert_clause    = f"ON CONFLICT ({conflict_target}) DO NOTHING"
 
         staging_table = f"staging_{table_name}_{os.getpid()}"
 

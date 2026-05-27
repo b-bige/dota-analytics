@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     stratz_url:        str = 'https://api.stratz.com/graphql'
     opendota_url:      str = 'https://api.opendota.com/api'
     cache_dir:         str = 'cache/draft_stats'
+    steam_web_api_url: str = 'https://api.steampowered.com'
+    steam_web_api_key: str
 
     model_config = SettingsConfigDict(
         env_file='.env', 

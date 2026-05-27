@@ -22,7 +22,7 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
         size='lg', 
         children=[ 
-            dcc.Interval(id='live-update-timer', interval=30*1000, n_intervals=0),
+            dcc.Interval(id='live-update-timer', interval=15*1000, n_intervals=0),
             dmc.ScrollArea(
                 h=600, 
                 offsetScrollbars=True,
@@ -46,7 +46,7 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
 )
 def update_live_ui(n):
     results = db_manager.select_to_df( #TODO Change the active 
-        "SELECT * FROM live_matches WHERE status = 'active' ORDER BY start_date_time DESC" 
+        "SELECT * FROM live_matches_debug WHERE status = 'active' ORDER BY start_date_time DESC" 
     )
     if results.empty:
         return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")

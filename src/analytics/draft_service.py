@@ -133,25 +133,22 @@ class DraftService:
     
     def draft_is_complete(self, match: dict) -> bool:
         """
-        Checks if a match dict returned by OpenDota Live API 
+        Checks if a match dict returned by OpenDota/Valve Live API 
         has the draft phase concluded. 
         """
-        players = match.get('players', [])
-        if len(players) != 10:
-            return False
-        
-        heroes_assigned = all(p.get('hero_id', 0) != 0 for p in players)
-        if not heroes_assigned:
-            return False
-        
+        players = match.get('players', [])   
         radiant = [p for p in players if p.get('team') == 0]
         dire    = [p for p in players if p.get('team') == 1]
-        
-        return len(radiant) == 5 and len(dire) == 5
+        heroes_assgined = all(p.get('hero_id', 0) != 0 for p in radiant) and all(p.get('hero_id', 0) != 0 for p in dire)
+        if not heroes_assgined:
+            return False
+        is_complete = len(radiant) == 5 and len(dire) == 5
+        return is_complete
 
     def get_draft(self, match: dict, live=True) -> tuple[list[int], list[int]]:
         """
-        Extract team drafts from match dict returned by OpenDota Live API
+        Extract team drafts from match dict returned by OpenDota/Valve Live API
+        or from a match stored in the database if live=False.
         Returns a tuple of 2 lists containing the hero IDs for each team.
         """
         players = match.get('players', [])
