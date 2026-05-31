@@ -13,8 +13,11 @@ wheels/
 # Logs
 **/logs
 
-#Data
+# Data
 /data
+
+# ML Models
+src/ml_models/
 
 # VSCode
 /.vscode
