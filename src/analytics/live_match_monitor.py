@@ -14,8 +14,9 @@ from src.database import DatabaseManager
 from src.analytics.match_predictor import MatchPredictor
 from src.analytics.draft_service import DraftService
 from src.analytics.rating_system import RatingSystem
+from src.analytics import StateManager, PlayerHistoryManager, MatchFeatureExtractor
 from cachetools import TTLCache
-from openskill.models import PlackettLuce, PlackettLuceRating
+import joblib
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class LiveMatchMonitor:
@@ -26,7 +27,10 @@ class LiveMatchMonitor:
         rating_system: RatingSystem,
         match_predictor: MatchPredictor,
         steam_api_client: SteamApiClient,
-        opendota_client: OpenDotaClient
+        opendota_client: OpenDotaClient,
+        state_manager: StateManager,
+        player_history_manager: PlayerHistoryManager,
+        feature_extractor: MatchFeatureExtractor
     ):
         self.db = db
         self.draft_service = draft_service
@@ -36,6 +40,9 @@ class LiveMatchMonitor:
         self.logo_cache = TTLCache(maxsize=500, ttl=86400)
         self.steam_api_client = steam_api_client
         self.opendota_client = opendota_client
+        self.state_manager = state_manager
+        self.player_history_manager = player_history_manager
+        self.feature_extractor = feature_extractor
 
     def _sync_metadata(self, live_matches: list[dict]):
         """
@@ -109,47 +116,37 @@ class LiveMatchMonitor:
             if not match.get('radiant_team') or not match.get('dire_team'):
                 continue # Not showing matches without data about teams for now
 
-            rad_player_ids = [p['account_id'] for p in match.get('players', []) if p.get('team') == 0]
-            dire_player_ids = [p['account_id'] for p in match.get('players', []) if p.get('team') == 1]
             scoreboard = match.get('scoreboard')
+            if not scoreboard:
+                continue
+            rad_players = [p for p in match.get('players', []) if p.get('team') == 0]
+            dire_players = [p for p in match.get('players', []) if p.get('team') == 1]
+            rad_heroes = [p['hero_id'] for p in rad_players]
+            dire_heroes = [p['hero_id'] for p in dire_players]
+            rad_player_ids = [p['account_id'] for p in rad_players]
+            dire_player_ids = [p['account_id'] for p in dire_players]
             game_time = scoreboard.get('duration')
             start_time = timestamp - game_time
 
-            ### Model feature: mu_diff 
+            #TODO move this and the other call for this function to a cache or some more efficient way
+            sub_patch, major_patch = self.opendota_client.get_internal_game_versions(int(round(start_time)), self.db) 
+            draft_features = self.feature_extractor.build_draft_feature_dict(
+                rad_heroes,
+                dire_heroes,
+                rad_player_ids,
+                dire_player_ids,
+                major_patch,
+                sub_patch
+            )
             rad_ratings = self.rating_service.get_ratings(rad_player_ids)
             dire_ratings = self.rating_service.get_ratings(dire_player_ids)
-            radiant_mus = np.array([r.mu for r in rad_ratings.values()])
-            dire_mus = np.array([r.mu for r in dire_ratings.values()])
-            mu_diff = np.mean(radiant_mus) - np.mean(dire_mus)
-
-            ### Model feature: std_diff
-            std_diff = np.std(radiant_mus) - np.std(dire_mus)
-
-            ### Model feature: max_mu_diff
-            max_mu_diff = np.max(radiant_mus) - np.max(dire_mus)
-
-            ### Model feature: sigma_total_diff
-            radiant_sigma = np.array([r.sigma for r in rad_ratings.values()])
-            dire_sigma = np.array([r.sigma for r in dire_ratings.values()])
-            sigma_total_diff = np.sum(radiant_sigma) - np.sum(dire_sigma)
-
-            ### Model feature: draft_diff
-            rad_heroes, dire_heroes = self.draft_service.get_draft(match, live=True)
-            patch = self.opendota_client.get_internal_game_version(start_time, self.db)
-            draft_strength_rad = self.draft_service.compute_draft_strength(rad_heroes, dire_heroes, patch)
-            draft_strength_dire = self.draft_service.compute_draft_strength(dire_heroes, rad_heroes, patch)
-            draft_diff = draft_strength_rad - draft_strength_dire
-
+            rating_features = self.rating_service.calculate_rating_features(rad_ratings.values(), dire_ratings.values())
+            feature_df = pd.DataFrame(draft_features | rating_features, index=[0])
+            feature_df = feature_df.reindex(sorted(feature_df.columns), axis=1)
+            rad_win_prob = float(self.match_predictor.predict_win_probability(feature_df)[0])
+            draft_strength_rad, draft_strength_dire = self.feature_extractor.extract_pure_draft_strength(feature_df, self.match_predictor)
             rad_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=0, live=True)
             dire_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=1, live=True)
-
-            rad_win_prob = self.match_predictor.predict_win_probability(
-                mu_diff=mu_diff,
-                std_diff=std_diff,
-                max_mu_diff=max_mu_diff,
-                sigma_total_diff=sigma_total_diff,
-                draft_diff=draft_diff
-            )
 
             rad_team = match.get('radiant_team')
             dire_team = match.get('dire_team')
@@ -191,9 +188,9 @@ class LiveMatchMonitor:
             })
 
         if match_updates:
-            df = pd.DataFrame(match_updates)
+            feature_df = pd.DataFrame(match_updates)
             self.db.insert_df_into_table(
-                df, 
+                feature_df, 
                 table_name="live_matches", 
                 conflict_cols=["match_id"],
                 avoid_cols=["start_date_time"]
@@ -210,113 +207,6 @@ class LiveMatchMonitor:
                 AND last_updated < NOW() - INTERVAL '15 minutes';
         """
         self.db.execute(query)
-    
-    def handle_finished(self): 
-        """
-        Requests parsing if not yet parsed on idle or deactivated live matches
-        and stores them in the database, and deletes them from live_matches when saved.
-        """
-        #NOTE: Function became redundant because Valve's Official API has been implemented, while I figure out
-        # how and when to fetch the finished matches from other APIs they are just set to status = 'finished' for now
-        query = """
-            SELECT match_id, status, job_id, avg_radiant_rating, avg_dire_rating, radiant_draft_score, dire_draft_score
-            FROM live_matches 
-            WHERE (last_updated < NOW() - INTERVAL '30 minutes' AND status = 'active') 
-               OR (last_updated < NOW() - INTERVAL '10 minutes' AND is_finished AND status = 'active')
-               OR (status = 'pending_parse')
-            ORDER BY start_date_time ASC
-        """ #NOTE: Ascending order for proper chronological rating calculation
-        finished_matches = self.db.select_to_df(query)
-        if finished_matches.empty:
-            logging.info("No finished matches found to process.")
-            return
-        
-        match_ids_fetched = []
-        match_ids_missing_detail = []
-        table_names = [
-            'match_details', 'match_death_events', 'match_pick_bans', 'match_tower_deaths', 
-            'match_players', 'match_purchases', 'match_runes', 'match_wards'
-        ]
-        accumulated_storage = {table: [] for table in table_names}
-
-        for row in finished_matches.itertuples(index=False):
-            match_id = getattr(row, 'match_id', None)
-            status = getattr(row, 'status', None)
-            job_id = getattr(row, 'job_id', None)
-            avg_radiant_rating = getattr(row, 'avg_radiant_rating', None)
-            avg_dire_rating = getattr(row, 'avg_dire_rating', None)
-            radiant_draft_score = getattr(row, 'radiant_draft_score', None)
-            dire_draft_score = getattr(row, 'dire_draft_score', None)
-            #TODO: Get rid of try-catch, find why no detail
-            try:
-                if status == 'active' or status == 'pending_parse':
-                    match_data = self.opendota_client.get_match(match_id, db_manager=self.db)   
-                    for table in table_names:
-                        data = match_data.get(table, [])
-                        if table == 'match_details':
-                            data.update(
-                                {
-                                    'avg_radiant_rating': avg_radiant_rating,
-                                    'avg_dire_rating': avg_dire_rating,
-                                    'radiant_draft_score': radiant_draft_score,
-                                    'dire_draft_score': dire_draft_score
-                                }
-                            )
-                            accumulated_storage[table].append(data)
-                        elif type(data) == dict:
-                            accumulated_storage[table].append(data)
-                        else:
-                            accumulated_storage[table].extend(data)  
-                    match_ids_fetched.append(match_id)
-                    continue
-                #NOTE: This part is commented out because I ran into rate limiting issues. Requesting a parse counts
-                #NOTE: 10x as much than a simple match request, and for now this feature is dropped.
-                #     if job_id is None:
-                #         # new_job = self.opendota_client.request_parse(match_id)
-                #         # logging.info(f"New job_id for match {match_id}: {new_job}") 
-                #         # update_query = """
-                #         #     UPDATE live_matches 
-                #         #     SET status = 'pending_parse', job_id = :job_id 
-                #         #     WHERE match_id = :match_id
-                #         # """
-                #         # self.db.execute(update_query, {"job_id": new_job, "match_id": match_id})
-                #         # continue
-                #     if self.opendota_client.is_parsed_match(job_id=job_id):
-                #         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
-                #         for table in table_names:
-                #             data = match_data.get(table, [])
-                #             if type(data) == dict:
-                #                 accumulated_storage[table].append(data)
-                #             else:
-                #                 accumulated_storage[table].extend(data)
-                            
-                #         match_ids_to_delete.append(match_id)
-                #         continue
-                # elif status == 'pending_parse':
-                #     if self.opendota_client.is_parsed_match(job_id=job_id):
-                #         match_data = self.opendota_client.get_match(match_id, db_manager=self.db)
-                        
-                #         for table in table_names:
-                #             data = match_data.get(table, [])
-                #             if type(data) == dict:
-                #                 accumulated_storage[table].append(data)
-                #             else:
-                #                 accumulated_storage[table].extend(data)
-                            
-                #         match_ids_to_delete.append(match_id)
-            except Exception as e:
-                match_ids_missing_detail.append(match_id)
-                logging.error(f"Error processing finished match {match_id}: {e}")
-        self._save_parsed_data(accumulated_storage)
-        if match_ids_fetched:
-            update_query = "UPDATE live_matches SET status = 'fetched_from_opendota' WHERE match_id = ANY(:match_ids)"
-            self.db.execute(update_query, {'match_ids': match_ids_fetched})
-            for mid_fetched in match_ids_fetched:
-                self.rating_service.update_ratings_from_match(mid_fetched)
-        if match_ids_missing_detail:
-            update_query = "UPDATE live_matches SET status = 'missing_detail' WHERE match_id = ANY(:match_ids)"
-            self.db.execute(update_query, {'match_ids': match_ids_missing_detail})
-        logging.info(f"Successfully moved and cleared {len(match_ids_fetched) + len(match_ids_missing_detail)} matches.")
 
     def fetch_league_details(self, league_id):
         try:
@@ -350,12 +240,19 @@ class LiveMatchMonitor:
 
 if __name__ == '__main__':
     db_manager = DatabaseManager()
+    sm = joblib.load('data/state_manager.joblib')
+    pm = joblib.load('data/player_history_manager.joblib')
+    rs = RatingSystem(db_manager)
+    feature_extractor = MatchFeatureExtractor(sm, pm, rs)
     monitor = LiveMatchMonitor(
         db=db_manager, 
         draft_service=DraftService(db_manager),
         rating_system=RatingSystem(db_manager), 
         match_predictor=MatchPredictor(),
         steam_api_client=SteamApiClient(),
-        opendota_client=OpenDotaClient()
+        opendota_client=OpenDotaClient(),
+        state_manager=sm,
+        player_history_manager=pm,
+        feature_extractor=feature_extractor
     )
     monitor.run_forever(interval=15, max_interval=120, increment=15)

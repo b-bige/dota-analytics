@@ -38,6 +38,42 @@ class RatingSystem:
                 
         return results
     
+    def calculate_rating_features(self, rad_ratings: list[PlackettLuceRating], dire_ratings: list[PlackettLuceRating]) -> dict:
+        """
+        Returns a dictionary of rating-related features derived from two teams' 
+        list of PlackettLuceRating objects required for making predictions.
+        """
+        rad_mus = np.array([r.mu for r in rad_ratings])
+        dire_mus = np.array([r.mu for r in dire_ratings])
+
+        mu_rad = np.mean(rad_mus)
+        mu_dire = np.mean(dire_mus)
+        mu_diff = mu_rad - mu_dire
+        max_mu_rad = np.max(rad_mus)
+        max_mu_dire = np.max(dire_mus)
+        max_mu_diff = max_mu_rad - max_mu_dire
+        std_mu_rad = np.std(rad_mus)
+        std_mu_dire = np.std(dire_mus)
+        std_diff = std_mu_rad - std_mu_dire
+        sigma_total_rad = np.sum(np.array([r.sigma for r in rad_ratings]))
+        sigma_total_dire = np.sum(np.array([r.sigma for r in dire_ratings]))
+        sigma_total_diff = sigma_total_rad - sigma_total_dire
+
+        return {
+            'mu_rad': mu_rad,
+            'mu_dire': mu_dire,
+            'mu_diff': mu_diff,
+            'max_mu_rad': max_mu_rad,
+            'max_mu_dire': max_mu_dire,
+            'max_mu_diff': max_mu_diff,
+            'std_mu_rad': std_mu_rad,
+            'std_mu_dire': std_mu_dire,
+            'std_diff': std_diff,
+            'sigma_total_rad': sigma_total_rad,
+            'sigma_total_dire': sigma_total_dire,
+            'sigma_total_diff': sigma_total_diff
+        }
+    
     def get_avg_team_ordinal(self, players: list[dict], team: int, live: bool = True) -> float:
         """
         Returns the mean ordinal rating for a team's players, None is no players are found

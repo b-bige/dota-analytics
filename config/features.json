@@ -1,0 +1,22 @@
+[
+  "mu_rad", "mu_dire", "mu_diff",
+  "max_mu_rad", "max_mu_dire", "max_mu_diff",      
+  "std_mu_rad", "std_mu_dire", "std_diff",
+  "sigma_total_rad", "sigma_total_dire", "sigma_total_diff",
+
+  "rad_hero_wr", "dire_hero_wr", "hero_wr_diff",
+  "max_rad_hero_wr", "max_dire_hero_wr",
+  "min_rad_hero_wr", "min_dire_hero_wr",
+
+  "rad_syn_wr", "dire_syn_wr", "syn_wr_diff",
+  "max_rad_syn_wr", "max_dire_syn_wr",
+  "min_rad_syn_wr", "min_dire_syn_wr",
+
+  "rad_cnt_wr", "dire_cnt_wr", "cnt_wr_diff",
+  "max_rad_cnt_wr", "max_dire_cnt_wr",
+  "min_rad_cnt_wr", "min_dire_cnt_wr",
+
+  "rad_player_hero_wr", "dire_player_hero_wr", "player_hero_wr_diff",
+  "max_rad_player_hero_wr", "max_dire_player_hero_wr",
+  "min_rad_player_hero_wr", "min_dire_player_hero_wr"
+]

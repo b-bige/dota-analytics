@@ -103,7 +103,7 @@ class OpenDotaClient(BaseDotaClient):
                 }
             )
         start_timestamp = match['start_time']
-        game_version = self.get_internal_game_version(start_timestamp, db_manager)
+        game_version = self.get_internal_game_versions(start_timestamp, db_manager)[0] # Stratz version ID 
         storage['match_details'] = {
             'id': match_id, 'tournamentId': match.get('tournament_id'), 'tournamentRound': match.get('tournament_round'),
             'leagueId': match['leagueid'], 'radiantTeamId': int(match.get('radiant_team_id', -1)), 'direTeamId': int(match.get('dire_team_id', -1)),
@@ -253,12 +253,15 @@ class OpenDotaClient(BaseDotaClient):
         else:
             logging.warning(f'API did not return expected job ID')
         
-    def get_internal_game_version(self, start_timestamp: int, db_manager: DatabaseManager):
+    def get_internal_game_versions(self, start_timestamp: int, db_manager: DatabaseManager):
         """
-        Fetches the Internal/Stratz-matching game version ID 
+        Fetches the Stratz and OpenDota game version IDs 
         from an Unix timestamp relating to the start of the game.
+        Stratz separates patch IDs between sub-patches, OpenDota
+        doesn't, this is useful for sub-meta analysis.
+        Returns a tuple (stratz_patch_id, opendota_patch_id)
         """
         start_datetime = datetime.fromtimestamp(start_timestamp)
-        query = 'SELECT id FROM patches WHERE "asOfDateTime" < :start_datetime ORDER BY "asOfDateTime" DESC LIMIT 1'
-        game_version = db_manager.select(query, params={'start_datetime': start_datetime})[0][0]
-        return game_version
+        query = 'SELECT id, opendota_patch_id FROM patches WHERE "asOfDateTime" < :start_datetime ORDER BY "asOfDateTime" DESC LIMIT 1'
+        game_versions = db_manager.select(query, params={'start_datetime': start_datetime})[0]
+        return game_versions
