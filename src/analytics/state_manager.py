@@ -1,5 +1,7 @@
 from collections import defaultdict, deque
 import numpy as np
+import pandas as pd
+from src.database import DatabaseManager
 
 class StateManager:
     @staticmethod
@@ -58,11 +60,11 @@ class StateManager:
                     self.recent_history_stats[s_type][k][0] += w
                     self.recent_history_stats[s_type][k][1] += g
                     
-            self.history_queue.append(outgoing_snapshot)
+            self.history_queue.append((self.current_major_patch, outgoing_snapshot))
             
             if len(self.history_queue) > self.WINDOW_SIZE:
                 print("Window limit reached. Forgetting oldest major patch data.")
-                oldest_snapshot = self.history_queue.popleft()
+                oldest_patch, oldest_snapshot = self.history_queue.popleft()
                 for s_type in ["hero", "syn", "cnt"]:
                     for k, (w, g) in oldest_snapshot[s_type].items():
                         self.recent_history_stats[s_type][k][0] -= w
@@ -100,3 +102,68 @@ class StateManager:
                     for stats_dict in [self.sub_patch_stats, self.major_patch_stats]:
                         stats_dict["cnt"][pair][0] += int(won)
                         stats_dict["cnt"][pair][1] += 1
+    
+    def save(self, db: DatabaseManager) -> None:
+        """
+        Saves the state of the class to the respective database tables. To be called only when the feature engineering
+        changes and the features are re-calculated for the entire dataset.
+        """
+        db.execute('DELETE FROM state_manager_meta')
+        db.execute(
+            'INSERT INTO state_manager_meta (current_sub_patch, current_major_patch) VALUES (:sub, :major)',
+            params={'sub': self.current_sub_patch, 'major': self.current_major_patch}
+        )
+        stats_rows = []
+        for scope, stats in [('sub_patch', self.sub_patch_stats), ('major_patch', self.major_patch_stats)]:
+            for stat_type in ['hero', 'syn', 'cnt']:
+                for key, (wins, games) in stats[stat_type].items():
+                    if isinstance(key, tuple):
+                        key_a, key_b = key
+                    else:
+                        key_a, key_b = key, -1
+                    stats_rows.append((scope, stat_type, int(key_a), int(key_b), wins, games))
+
+        db.execute('DELETE FROM state_manager_stats')
+        if stats_rows:
+            db.insert_df_into_table(
+                pd.DataFrame(stats_rows, columns=['scope', 'stat_type', 'key_a', 'key_b', 'wins', 'games']),
+                'state_manager_stats',
+                conflict_cols=['scope', 'stat_type', 'key_a', 'key_b']
+            )
+
+        hist_rows = []
+        for stat_type in ['hero', 'syn', 'cnt']:
+            for key, (wins, games) in self.recent_history_stats[stat_type].items():
+                if isinstance(key, tuple):
+                    key_a, key_b = key
+                else:
+                    key_a, key_b = key, -1
+                hist_rows.append((stat_type, int(key_a), int(key_b), wins, games))
+
+        db.execute('DELETE FROM state_manager_history')
+        if hist_rows:
+            db.insert_df_into_table(
+                pd.DataFrame(hist_rows, columns=['stat_type', 'key_a', 'key_b', 'wins', 'games']),
+                'state_manager_history',
+                conflict_cols=['stat_type', 'key_a', 'key_b']
+            )
+
+        queue_rows = []
+        for pos, (major_patch, snapshot) in enumerate(self.history_queue):
+            for stat_type in ['hero', 'syn', 'cnt']:
+                for key, (wins, games) in snapshot[stat_type].items():
+                    key_a, key_b = key if isinstance(key, tuple) else (key, -1)
+                    
+                    queue_rows.append((
+                        pos, major_patch, stat_type, 
+                        int(key_a), int(key_b), 
+                        wins, games
+                    ))
+
+        db.execute('DELETE FROM state_manager_queue')
+        if queue_rows:
+            db.insert_df_into_table(
+                pd.DataFrame(queue_rows, columns=['queue_position', 'major_patch', 'stat_type', 'key_a', 'key_b', 'wins', 'games']),
+                'state_manager_queue',
+                conflict_cols=['queue_position', 'stat_type', 'key_a', 'key_b']
+            )

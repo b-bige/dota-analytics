@@ -11,7 +11,7 @@ ALPHA = int(raw_alpha) if raw_alpha else 20
 raw_window = input('Enter ROLLING_MAJOR_WINDOW (default 3): ')
 WINDOW_SIZE = int(raw_window) if raw_window else 3 
 
-def process_matches(df_raw, feature_extractor: MatchFeatureExtractor):
+def process_matches(df_raw, feature_extractor: MatchFeatureExtractor, db: DatabaseManager):
     training_data = []
     for index, match in df_raw.iterrows():
         m_id = match['match_id']
@@ -49,6 +49,9 @@ def process_matches(df_raw, feature_extractor: MatchFeatureExtractor):
         if index % 5000 == 0 and index > 0:
             print(f'{index} matches processed')
             
+    print('Saving state and player history manager data to the DB')
+    sm.save(db)
+    pm.save(db)
     print('Constructing and returning DataFrame')
     return pd.DataFrame(training_data)
 
@@ -90,8 +93,8 @@ if __name__ == '__main__':
     pm = PlayerHistoryManager()
     db = DatabaseManager()
     rs = RatingSystem(db_manager=db)
-    feature_extractor = MatchFeatureExtractor(sm, pm, rs)
-    df_final = process_matches(df_raw, feature_extractor=feature_extractor)
+    feature_extractor = MatchFeatureExtractor(rs, sm, pm)
+    df_final = process_matches(df_raw, feature_extractor=feature_extractor, db=db)
     
     output_filename = f'data/alpha_{ALPHA}_window_{WINDOW_SIZE}.parquet'
     print(f'Saving to {output_filename}...')

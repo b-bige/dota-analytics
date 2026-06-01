@@ -1,2 +1,0 @@
--- Active: 1771411304973@@165.22.73.33@5432@dota@kaggle
-SELECT * FROM  WHERE match_id = 3754145708;

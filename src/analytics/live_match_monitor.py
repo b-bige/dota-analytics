@@ -14,7 +14,7 @@ from src.database import DatabaseManager
 from src.analytics.match_predictor import MatchPredictor
 from src.analytics.draft_service import DraftService
 from src.analytics.rating_system import RatingSystem
-from src.analytics import StateManager, PlayerHistoryManager, MatchFeatureExtractor
+from src.analytics import MatchFeatureExtractor
 from cachetools import TTLCache
 import joblib
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -28,8 +28,6 @@ class LiveMatchMonitor:
         match_predictor: MatchPredictor,
         steam_api_client: SteamApiClient,
         opendota_client: OpenDotaClient,
-        state_manager: StateManager,
-        player_history_manager: PlayerHistoryManager,
         feature_extractor: MatchFeatureExtractor
     ):
         self.db = db
@@ -40,8 +38,6 @@ class LiveMatchMonitor:
         self.logo_cache = TTLCache(maxsize=500, ttl=86400)
         self.steam_api_client = steam_api_client
         self.opendota_client = opendota_client
-        self.state_manager = state_manager
-        self.player_history_manager = player_history_manager
         self.feature_extractor = feature_extractor
 
     def _sync_metadata(self, live_matches: list[dict]):
@@ -99,85 +95,112 @@ class LiveMatchMonitor:
         A timestamp taken right after the API call is returned for game start time calculation.
         """
         #TODO: Make a rating updating script for the new Valve pipeline
-        #TODO: create methods for the code for cleanup
         if not live_matches:
             return
         self._sync_metadata(live_matches)
-        match_updates = []
+
+        matches_to_process = []
+
         for match in live_matches:
             match_id = match.get('match_id')
-
             league_id = match.get('league_id') 
-            if league_id == 0 or not league_id: continue
-            if not match_id:
+            
+            if league_id == 0 or not league_id or not match_id: 
                 continue
             if not self.draft_service.draft_is_complete(match):
                 continue
             if not match.get('radiant_team') or not match.get('dire_team'):
-                continue # Not showing matches without data about teams for now
-
+                continue 
             scoreboard = match.get('scoreboard')
             if not scoreboard:
                 continue
+
             rad_players = [p for p in match.get('players', []) if p.get('team') == 0]
             dire_players = [p for p in match.get('players', []) if p.get('team') == 1]
-            rad_heroes = [p['hero_id'] for p in rad_players]
-            dire_heroes = [p['hero_id'] for p in dire_players]
-            rad_player_ids = [p['account_id'] for p in rad_players]
-            dire_player_ids = [p['account_id'] for p in dire_players]
-            game_time = scoreboard.get('duration')
+            
+            game_time = scoreboard.get('duration', 0)
             start_time = timestamp - game_time
-
-            #TODO move this and the other call for this function to a cache or some more efficient way
+            
+            # TODO: move this to a cache as planned
             sub_patch, major_patch = self.opendota_client.get_internal_game_versions(int(round(start_time)), self.db) 
-            draft_features = self.feature_extractor.build_draft_feature_dict(
-                rad_heroes,
-                dire_heroes,
-                rad_player_ids,
-                dire_player_ids,
-                major_patch,
-                sub_patch
-            )
-            rad_ratings = self.rating_service.get_ratings(rad_player_ids)
-            dire_ratings = self.rating_service.get_ratings(dire_player_ids)
+
+            matches_to_process.append({
+                'match_id': match_id,
+                'rad_heroes': [p['hero_id'] for p in rad_players],
+                'dire_heroes': [p['hero_id'] for p in dire_players],
+                'rad_players': [p['account_id'] for p in rad_players],
+                'dire_players': [p['account_id'] for p in dire_players],
+                'major_patch': major_patch,
+                'sub_patch': sub_patch,
+                'original_match': match,
+                'start_time': start_time,
+                'game_time': game_time
+            })
+
+        if not matches_to_process:
+            return
+
+        batch_draft_features = self.feature_extractor.batch_build_draft_features(matches_to_process, self.db)
+
+        match_updates = []
+        for params in matches_to_process:
+            match_id = params['match_id']
+            match = params['original_match']
+            league_id = match.get('league_id')
+            scoreboard = match.get('scoreboard')
+            
+            draft_features = batch_draft_features.get(match_id)
+            if not draft_features:
+                logging.warning(f'Draft features were excluded for match ID {match_id}')
+                continue 
+
+            rad_ratings = self.rating_service.get_ratings(params['rad_players'])
+            dire_ratings = self.rating_service.get_ratings(params['dire_players'])
             rating_features = self.rating_service.calculate_rating_features(rad_ratings.values(), dire_ratings.values())
+            
             feature_df = pd.DataFrame(draft_features | rating_features, index=[0])
             feature_df = feature_df.reindex(sorted(feature_df.columns), axis=1)
+            
+
             rad_win_prob = float(self.match_predictor.predict_win_probability(feature_df)[0])
             draft_strength_rad, draft_strength_dire = self.feature_extractor.extract_pure_draft_strength(feature_df, self.match_predictor)
-            rad_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=0, live=True)
-            dire_ordinal = self.rating_service.get_avg_team_ordinal(match.get('players', []), team=1, live=True)
+            
+            players = match.get('players', [])
+            rad_ordinal = self.rating_service.get_avg_team_ordinal(players, team=0, live=True)
+            dire_ordinal = self.rating_service.get_avg_team_ordinal(players, team=1, live=True)
 
-            rad_team = match.get('radiant_team')
-            dire_team = match.get('dire_team')
-            rad_id = int(rad_team.get('team_id')) or 0
-            dire_id = int(dire_team.get('team_id')) or 0
-            rad_name = rad_team.get('team_name', 'Radiant Unknown')
-            dire_name = dire_team.get('team_name', 'Dire Unknown')
-            rad_score = scoreboard.get('radiant').get('score')
-            dire_score = scoreboard.get('dire').get('score')
-            league_name = self.league_cache.get(match.get('league_id'), {}).get('league_name')
+            rad_team = match.get('radiant_team', {})
+            dire_team = match.get('dire_team', {})
+            rad_id = int(rad_team.get('team_id') or 0)
+            dire_id = int(dire_team.get('team_id') or 0)
+            
+            rad_score = scoreboard.get('radiant', {}).get('score', 0)
+            dire_score = scoreboard.get('dire', {}).get('score', 0)
+            
+            league_name = self.league_cache.get(league_id, {}).get('league_name')
             if not league_name:
                 league_name = self.fetch_league_details(league_id)
-            rad_networth = np.array([p.get('net_worth') for p in scoreboard.get('radiant').get('players')])
-            dire_networth = np.array([p.get('net_worth') for p in scoreboard.get('dire').get('players')])
+                
+            rad_networth = np.array([p.get('net_worth', 0) for p in scoreboard.get('radiant', {}).get('players', [])])
+            dire_networth = np.array([p.get('net_worth', 0) for p in scoreboard.get('dire', {}).get('players', [])])
             radiant_lead = np.sum(rad_networth) - np.sum(dire_networth)
+            
             match_updates.append({
                 'match_id': match_id,
                 'league_id': league_id,
-                'league_name': self.league_cache.get(match.get('league_id'), {}).get('league_name', 'Unknown'),
-                'start_date_time': datetime.fromtimestamp(start_time),
+                'league_name': league_name or 'Unknown',
+                'start_date_time': datetime.fromtimestamp(params['start_time']),
                 'radiant_id': rad_id,
                 'dire_id': dire_id,
-                'radiant_name': rad_name,
-                'dire_name': dire_name,
+                'radiant_name': rad_team.get('team_name', 'Radiant Unknown'),
+                'dire_name': dire_team.get('team_name', 'Dire Unknown'),
                 'radiant_logo': self.logo_cache.get(rad_id, {}).get('logo_url', ''),
                 'dire_logo': self.logo_cache.get(dire_id, {}).get('logo_url', ''),
                 'radiant_score': rad_score,
                 'dire_score': dire_score,
-                'game_time': int(round(game_time)),
+                'game_time': int(round(params['game_time'])),
                 'radiant_lead': radiant_lead,
-                'is_finished': False, #TODO: figure out if we need this
+                'is_finished': False, 
                 'status': 'active',
                 'radiant_draft_score': draft_strength_rad,
                 'dire_draft_score': draft_strength_dire,
@@ -188,9 +211,8 @@ class LiveMatchMonitor:
             })
 
         if match_updates:
-            feature_df = pd.DataFrame(match_updates)
             self.db.insert_df_into_table(
-                feature_df, 
+                pd.DataFrame(match_updates), 
                 table_name="live_matches", 
                 conflict_cols=["match_id"],
                 avoid_cols=["start_date_time"]
@@ -199,7 +221,7 @@ class LiveMatchMonitor:
         else:
             logging.info('No matches to be updated')
 
-        ### Setting status to 'finished' and is_finished to TRUE for inactive matches 
+        ### Cleaning up inactive matches 
         query = """
             UPDATE live_matches 
             SET status = 'finished', is_finished = TRUE 
@@ -240,10 +262,8 @@ class LiveMatchMonitor:
 
 if __name__ == '__main__':
     db_manager = DatabaseManager()
-    sm = joblib.load('data/state_manager.joblib')
-    pm = joblib.load('data/player_history_manager.joblib')
     rs = RatingSystem(db_manager)
-    feature_extractor = MatchFeatureExtractor(sm, pm, rs)
+    feature_extractor = MatchFeatureExtractor(rating_service=rs)
     monitor = LiveMatchMonitor(
         db=db_manager, 
         draft_service=DraftService(db_manager),
@@ -251,8 +271,6 @@ if __name__ == '__main__':
         match_predictor=MatchPredictor(),
         steam_api_client=SteamApiClient(),
         opendota_client=OpenDotaClient(),
-        state_manager=sm,
-        player_history_manager=pm,
         feature_extractor=feature_extractor
     )
     monitor.run_forever(interval=15, max_interval=120, increment=15)
