@@ -47,4 +47,3 @@
 * **Detailed Match Data:** Detailed match data provided by [STRATZ API](https://stratz.com) and [OpenDota API](https://www.opendota.com).
 * **Historical Dataset:** A collection of historical match metadata was derived from https://doi.org/10.34740/kaggle/ds/2832370
 * **Asset Imagery:** All hero and item icons are property of Valve Corporation.
-Removed the parts are not ready implemented yet/not ready. I will make the mock thing tomorrow hopefully, along with the rating metric. For now, how does it look?
