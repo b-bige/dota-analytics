@@ -63,7 +63,7 @@ def fetch_finished_live():
             match_players = players[players['match_id'] == match_details['id']]
             update_analytical_managers(match_details, match_players, db)
         db.execute('DELETE FROM live_matches WHERE match_id = ANY(:batch_ids)', params={'batch_ids': batch_ids})
-        logging.info(f"Finished {i} matches out ouf {len(live_ids)}")
+        logging.info(f"Finished {i + 100} matches out ouf {len(live_ids)}")
 
 def update_analytical_managers(match_details, players, db_manager: DatabaseManager):
     """
