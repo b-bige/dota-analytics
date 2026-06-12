@@ -7,7 +7,7 @@ from src.database import DatabaseManager
 class RatingSystem:
     def __init__(self, db_manager: DatabaseManager, model_tau: float=0.5):
         self.db = db_manager
-        self.model = PlackettLuce(model_tau)
+        self.model = PlackettLuce(tau=model_tau)
         self._rating_cache = LRUCache(maxsize=50000)
 
     def _create_rating_obj(self, mu: float, sigma: float) -> PlackettLuceRating:
