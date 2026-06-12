@@ -6,6 +6,7 @@ from .rating_system import RatingSystem
 
 from .match_feature_extractor import MatchFeatureExtractor
 from .live_match_monitor import LiveMatchMonitor
+from .betting_helper import BettingHelper
 
 __all__ = [
     "DraftService", 
@@ -14,5 +15,6 @@ __all__ = [
     "RatingSystem", 
     "PlayerHistoryManager", 
     "StateManager",
-    "MatchFeatureExtractor"
+    "MatchFeatureExtractor",
+    "BettingHelper"
 ]

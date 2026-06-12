@@ -55,8 +55,8 @@ class RatingSystem:
         std_mu_rad = np.std(rad_mus)
         std_mu_dire = np.std(dire_mus)
         std_diff = std_mu_rad - std_mu_dire
-        sigma_total_rad = np.sum(np.array([r.sigma for r in rad_ratings]))
-        sigma_total_dire = np.sum(np.array([r.sigma for r in dire_ratings]))
+        sigma_total_rad = np.sum([r.sigma for r in rad_ratings])
+        sigma_total_dire = np.sum([r.sigma for r in dire_ratings])
         sigma_total_diff = sigma_total_rad - sigma_total_dire
 
         return {

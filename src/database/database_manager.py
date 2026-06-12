@@ -52,7 +52,8 @@ class DatabaseManager():
                           conflict_cols: list = [],
                           update_cols: list | None = None,
                           jsonb_cols: list = [],
-                          avoid_cols: list | None = None) -> None:
+                          avoid_cols: list | None = None,
+                          increment_cols: list = []) -> None:
         """
         Bulk-inserts or upserts a DataFrame into a PostgreSQL table using COPY.
 
@@ -115,19 +116,31 @@ class DatabaseManager():
 
         upsert_clause = ""
         if conflict_cols:
-            if update_cols:
-                cols_to_update = update_cols 
-            else:
-                cols_to_update = [c for c in col_names if c not in conflict_cols]
+            conflict_target = ", ".join(f'"{c}"' for c in conflict_cols)
+            
+            # Figure out which columns get a standard overwrite replacement
+            cols_to_replace = update_cols if update_cols is not None else [
+                c for c in col_names if c not in conflict_cols and c not in increment_cols
+            ]
             if avoid_cols:
-                cols_to_update = [c for c in cols_to_update if c not in avoid_cols]
-            if cols_to_update:
-                update_stmt     = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols_to_update)
-                conflict_target  = ", ".join(f'"{c}"' for c in conflict_cols)
-                upsert_clause    = f"ON CONFLICT ({conflict_target}) DO UPDATE SET {update_stmt}"
+                cols_to_replace = [c for c in cols_to_replace if c not in avoid_cols]
+
+            # Build the SET clauses
+            set_clauses = []
+            
+            # Standard Overwrite (e.g., name = EXCLUDED.name)
+            for c in cols_to_replace:
+                set_clauses.append(f'"{c}" = EXCLUDED."{c}"')
+                
+            # Analytical Math (e.g., wins = table.wins + EXCLUDED.wins)
+            for c in increment_cols:
+                set_clauses.append(f'"{c}" = "{table_name}"."{c}" + EXCLUDED."{c}"')
+
+            if set_clauses:
+                update_stmt = ", ".join(set_clauses)
+                upsert_clause = f"ON CONFLICT ({conflict_target}) DO UPDATE SET {update_stmt}"
             else:
-                conflict_target  = ", ".join(f'"{c}"' for c in conflict_cols)
-                upsert_clause    = f"ON CONFLICT ({conflict_target}) DO NOTHING"
+                upsert_clause = f"ON CONFLICT ({conflict_target}) DO NOTHING"
 
         staging_table = f"staging_{table_name}_{os.getpid()}"
 

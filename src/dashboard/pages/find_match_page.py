@@ -118,7 +118,7 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
 
 def create_match_element(row: dict):
     result_color = COLORS['radiant'] if row['radiant_win'] else COLORS['dire']
-    row['duration'] = convert_duration_format(row['duration'])
+    row['duration'] = format_game_time(row['duration'])
     start_date = row['start_date'].astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S")
     league = row.get('league_name', None)
     rad_rating = row.get('rad_rating', None)

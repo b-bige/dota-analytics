@@ -59,7 +59,7 @@ class OpenDotaClient(BaseDotaClient):
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 logging.warning(f'Rate limit exceeded: retrying...')
-                time.sleep(60)
+                time.sleep(15)
                 raise e
             if e.response.status_code == 404:
                 logging.error(
@@ -81,6 +81,30 @@ class OpenDotaClient(BaseDotaClient):
             )
         except Exception as e:
             logging.error(f"Failed {method} request at {self.OPENDOTA_URL}/{endpoint}") 
+
+    def get_multiple_matches(self, match_ids: list, **kwargs):
+        db_manager: DatabaseManager = kwargs.get('db_manager')
+        master_storage = {
+            'match_details': [],
+            'match_death_events': [],
+            'match_pick_bans': [],
+            'match_tower_deaths': [],
+            'match_players': [],
+            'match_purchases': [],
+            'match_runes': [],
+            'match_wards': []
+        }
+        for match_id in match_ids:
+            try:
+                match_data = self.get_match(match_id, db_manager=db_manager)
+                for table, records in match_data.items():
+                    if table == 'match_details':
+                        master_storage['match_details'].append(records)
+                    else:
+                        master_storage[table].extend(records)
+            except Exception as e:
+                logging.error(f"Failed to process match {match_id}: {e}")
+        return master_storage
         
     def get_match(self, match_id, **kwargs):
         #TODO: refactor and optimize
@@ -104,17 +128,19 @@ class OpenDotaClient(BaseDotaClient):
             )
         start_timestamp = match['start_time']
         game_version = self.get_internal_game_versions(start_timestamp, db_manager)[0] # Stratz version ID 
+        cluster_id = match.get('cluster', -1)
+        series_id = match.get('series_id', -1)
         storage['match_details'] = {
             'id': match_id, 'tournamentId': match.get('tournament_id'), 'tournamentRound': match.get('tournament_round'),
             'leagueId': match['leagueid'], 'radiantTeamId': int(match.get('radiant_team_id', -1)), 'direTeamId': int(match.get('dire_team_id', -1)),
-            'seriesId': match['series_id'], 'clusterId': match['cluster'], 'didRadiantWin': match['radiant_win'],
+            'seriesId': int(series_id) if series_id else -1, 'clusterId': int(cluster_id) if cluster_id else -1, 'didRadiantWin': match['radiant_win'],
             'startDateTime': start_timestamp, 'endDateTime': match['start_time'] + match['duration'], 'durationSeconds': match['duration'],
             'firstBloodTime': match['first_blood_time'], 'towerStatusRadiant': match['tower_status_radiant'], 'towerStatusDire': match['tower_status_dire'],
             'barracksStatusRadiant': match['barracks_status_radiant'], 'barracksStatusDire': match['barracks_status_dire'], 'rank': match.get('rank_tier'),
             'actualRank': match.get('rank_tier_actual'), 'averageRank': match.get('average_rank'), 'averageImp': match.get('average_imp'),
             'radiant_score': match['radiant_score'], 'dire_score': match['dire_score'], 'gameVersionId': game_version
         }
-        for obj in match.get('objectives'):
+        for obj in match.get('objectives', []):
             if obj['type'] == 'building_kill':
                 attacker = db_manager.get_hero_id_by_name(obj['unit'])
                 if attacker == -1: #Hero ID defaulted to -1, it is an NPC
@@ -135,7 +161,7 @@ class OpenDotaClient(BaseDotaClient):
                 )
         for p in match['players']:
             hero_id = p['hero_id']
-            for kill in p.get('kills_log'):
+            for kill in p.get('kills_log', []):
                 killed_id = db_manager.get_hero_id_by_name(kill['key'])
                 if killed_id == -1:
                     logging.warning(f'Unknown ID found in kill data for unit: {kill['key']}')
@@ -175,7 +201,7 @@ class OpenDotaClient(BaseDotaClient):
                     'assists': p.get('assists')
                 }
             )
-            for pur in p.get('purchase_log'):
+            for pur in p.get('purchase_log', []):
                 item_id = db_manager.get_item_id_by_name(pur['key'])
                 if item_id == -1:
                     logging.warning(f'Unknown ID found in data for item: {pur['key']}')
@@ -187,7 +213,7 @@ class OpenDotaClient(BaseDotaClient):
                         'itemId': item_id
                     }
                 )
-            for rune in p.get('runes_log'):
+            for rune in p.get('runes_log', []):
                 storage['match_runes'].append(
                     {
                         'match_id': match_id,
@@ -196,7 +222,7 @@ class OpenDotaClient(BaseDotaClient):
                         'rune': self.RUNE_MAP[rune['key']]
                     }
                 )
-            for ward in p.get('obs_log'):
+            for ward in p.get('obs_log', []):
                 storage['match_wards'].append(
                     {
                         'match_id': match_id,
@@ -207,7 +233,7 @@ class OpenDotaClient(BaseDotaClient):
                         'positionY': ward['y']
                     }
                 )
-            for ward in p.get('sen_log'):
+            for ward in p.get('sen_log', []):
                 storage['match_wards'].append(
                     {
                         'match_id': match_id,

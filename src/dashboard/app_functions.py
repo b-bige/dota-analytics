@@ -23,13 +23,12 @@ def get_total_matches(clauses: str='', params=None):
         query += clauses
     return db_manager.select(query, params=params)[0][0]
 
-def convert_duration_format(duration: int) -> str:
-    duration = round(duration)
-    minutes = str(duration // 60)
-    seconds = str(duration % 60)
-    if len(seconds) == 1: 
-        seconds += '0'
-    return minutes + ':' + seconds
+def format_game_time(seconds: int) -> str:
+    if not seconds:
+        return "00:00"
+    minutes = seconds // 60
+    secs = seconds % 60
+    return f"{minutes:02d}:{secs:02d}"
 
 ##### Graphs
 

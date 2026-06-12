@@ -208,7 +208,7 @@ def update_overview_kpis(*filter_args):
         return [dmc.Text("No games found for these filters.", c='red', fw=700)]
         
     radiant_win = str(round(results[1], 2)) + '%' if results[1] else '0%'
-    avg_game_length = convert_duration_format(results[2])
+    avg_game_length = format_game_time(results[2])
     
     query, params = qb.build(select='AVG(radiant_score + dire_score)')
     avg_kills = round(db_manager.select(query, params=params)[0][0] or 0, 0)

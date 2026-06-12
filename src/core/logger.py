@@ -1,6 +1,7 @@
 import os
 import logging
 import queue
+import sys
 from logging.handlers import WatchedFileHandler, QueueListener, QueueHandler
 
 def setup_logger(logfile_path, level=logging.INFO):
@@ -22,8 +23,11 @@ def setup_logger(logfile_path, level=logging.INFO):
         '[PID: %(process)d] %(asctime)s - %(levelname)s - %(name)s - %(message)s'
     ))
 
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(level)
+
     listener = QueueListener(
-        log_queue, console_handler, file_handler, respect_handler_level=True
+        log_queue, console_handler, file_handler, stream_handler, respect_handler_level=True
     )
     listener.start()
 

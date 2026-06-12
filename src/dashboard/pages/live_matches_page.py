@@ -57,7 +57,7 @@ def create_live_match_card(row):
     radiant_lead = row['radiant_lead']
     is_radiant_lead = radiant_lead > 0
     lead_color = COLORS['radiant'] if is_radiant_lead else COLORS['dire']
-    game_time = convert_duration_format(row['game_time'])
+    game_time = format_game_time(row['game_time'])
     league = row['league_name']
     is_unknown_League = (league == 'Unknown League')
     start_time = row['start_date_time'].astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S")
@@ -115,108 +115,114 @@ def create_live_match_card(row):
             ]
         )
 
-    return dmc.Paper(
-        withBorder=True,
-        shadow='sm',
-        p='md',
-        radius='md',
-        style={
-            'display': 'flex',
-            'flexDirection': 'column',
-            "transition": "transform 0.2s ease"
-        },
-        children=[
-            html.Div(
-                style={'flex': 1},
-                children=[
-                    dmc.Group(
-                        justify="space-between",
-                        mb="md",
-                        children=[
-                            dmc.Group(
-                                children=[
-                                    dmc.Badge(league, variant='outline' if is_unknown_League else 'gradient'),
-                                    dmc.Badge('Finished', variant='filled') if row['is_finished'] else None,
-                                ]
-                            ),
-                            dmc.Badge('Radiant Lead' if is_radiant_lead else 'Dire Lead', color=lead_color, variant='filled')
-                        ]
-                    )
-                ]
-            ),
-            dmc.Group(
-                justify="center", 
-                gap="xl",         
-                children=[
-                    # Radiant Stack
-                    dmc.Stack(
-                        align="center", 
-                        gap=0, 
-                        w=150, 
-                        children=[
-                            dmc.Text('Radiant', fw=700, c=COLORS['radiant']),
-                            dmc.Paper(
-                                shadow="xs", radius="md", p=5, withBorder=True, bg="white", 
-                                children=[
-                                    dmc.Image(
-                                        src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
-                                        fallbackSrc='/assets/no_image.svg',
-                                        w=50, h=50, fit="contain"
-                                    )
-                                ]
-                            ),
-                            dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center", lineClamp=1),
-                            dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
-                            dmc.Text(f'Draft: {radiant_draft_score}%', size="sm", fw=600, c=COLORS['radiant']), # Updated!
-                        ]
-                    ),
-                    
-                    dmc.Text("VS", fw=900, size="lg", c="dimmed"),
-                    
-                    # Dire Stack
-                    dmc.Stack(
-                        align="center", 
-                        gap=0, 
-                        w=150, 
-                        children=[
-                            dmc.Text('Dire', fw=700, c=COLORS['dire']),
-                            dmc.Paper(
-                                shadow="xs", radius="md", p=5, withBorder=True, bg="white",
-                                children=[
-                                    dmc.Image(
-                                        src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
-                                        fallbackSrc='/assets/no_image.svg',
-                                        w=50, h=50, fit="contain"
-                                    )
-                                ]
-                            ),
-                            dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center", lineClamp=1), 
-                            dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
-                            dmc.Text(f'Draft: {dire_draft_score}%', size="sm", fw=600, c=COLORS['dire']), # Updated!
-                        ]
-                    )
-                ]
-            ),
-            html.Div(
-                children=[
-                    dmc.Divider(variant="dashed", my="sm"),
-            
-                    dmc.Group(
-                        justify="space-between",
-                        children=[
-                            dmc.Text(f"📅 {start_time}", size="xs", c="dimmed"),
-                            dmc.Text(f"⏱️ {game_time}", size="xs", c="dimmed"),
-                            dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
-                        ]
-                    ),
-                    dmc.Divider(variant="dashed", my="sm"),
-                    
-                    html.Div(
-                        children=[
-                            prediction_ui
-                        ]
-                    )
-                ]
-            )        
-        ]
+    return dcc.Link(
+        href=f'/live-match/{row['match_id']}',
+        refresh=False,
+        style={'textDecoration': 'none', 'color': 'inherit', 'display': 'block'}, 
+        children=dmc.Paper(
+            withBorder=True,
+            shadow='sm',
+            p='md',
+            radius='md',
+            style={
+                'display': 'flex',
+                'flexDirection': 'column',
+                "transition": "transform 0.2s ease"
+            },
+            className='match-card-hover',
+            children=[
+                html.Div(
+                    style={'flex': 1},
+                    children=[
+                        dmc.Group(
+                            justify="space-between",
+                            mb="md",
+                            children=[
+                                dmc.Group(
+                                    children=[
+                                        dmc.Badge(league, variant='outline' if is_unknown_League else 'gradient'),
+                                        dmc.Badge('Finished', variant='filled') if row['is_finished'] else None,
+                                    ]
+                                ),
+                                dmc.Badge('Radiant Lead' if is_radiant_lead else 'Dire Lead', color=lead_color, variant='filled')
+                            ]
+                        )
+                    ]
+                ),
+                dmc.Group(
+                    justify="center", 
+                    gap="xl",         
+                    children=[
+                        # Radiant Stack
+                        dmc.Stack(
+                            align="center", 
+                            gap=0, 
+                            w=150, 
+                            children=[
+                                dmc.Text('Radiant', fw=700, c=COLORS['radiant']),
+                                dmc.Paper(
+                                    shadow="xs", radius="md", p=5, withBorder=True, bg="white", 
+                                    children=[
+                                        dmc.Image(
+                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
+                                            fallbackSrc='/assets/no_image.svg',
+                                            w=50, h=50, fit="contain"
+                                        )
+                                    ]
+                                ),
+                                dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm", ta="center", lineClamp=1),
+                                dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
+                                dmc.Text(f'Draft: {radiant_draft_score}%', size="sm", fw=600, c=COLORS['radiant']), # Updated!
+                            ]
+                        ),
+                        
+                        dmc.Text("VS", fw=900, size="lg", c="dimmed"),
+                        
+                        # Dire Stack
+                        dmc.Stack(
+                            align="center", 
+                            gap=0, 
+                            w=150, 
+                            children=[
+                                dmc.Text('Dire', fw=700, c=COLORS['dire']),
+                                dmc.Paper(
+                                    shadow="xs", radius="md", p=5, withBorder=True, bg="white",
+                                    children=[
+                                        dmc.Image(
+                                            src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
+                                            fallbackSrc='/assets/no_image.svg',
+                                            w=50, h=50, fit="contain"
+                                        )
+                                    ]
+                                ),
+                                dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm", ta="center", lineClamp=1), 
+                                dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
+                                dmc.Text(f'Draft: {dire_draft_score}%', size="sm", fw=600, c=COLORS['dire']), # Updated!
+                            ]
+                        )
+                    ]
+                ),
+                html.Div(
+                    children=[
+                        dmc.Divider(variant="dashed", my="sm"),
+                
+                        dmc.Group(
+                            justify="space-between",
+                            children=[
+                                dmc.Text(f"📅 {start_time}", size="xs", c="dimmed"),
+                                dmc.Text(f"⏱️ {game_time}", size="xs", c="dimmed"),
+                                dmc.Text(f"ID: {row['match_id']}", size="xs", c="dimmed")
+                            ]
+                        ),
+                        dmc.Divider(variant="dashed", my="sm"),
+                        
+                        html.Div(
+                            children=[
+                                prediction_ui
+                            ]
+                        )
+                    ]
+                )        
+            ]
+        )
     )

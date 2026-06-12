@@ -122,7 +122,7 @@ def set_tab(pathname):
         Input('url', 'pathname')
 )
 def update_logo(pathname:str):
-    if pathname.startswith('/match/'):
+    if pathname.startswith('/match/') or pathname.startswith('/live-match/'):
         match_id = pathname.split('/')[-1]
         return f'Match ID {match_id}'
     else:
