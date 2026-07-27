@@ -178,7 +178,7 @@ def create_match_element(row: dict):
                                     bg="white", # Forces a background so transparent logos are visible
                                     children=[
                                         dmc.Image(
-                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
+                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/radiant_icon.webp', 
                                             fallbackSrc='/assets/no_image.svg',
                                             w=50, h=50, 
                                             fit="contain"
@@ -186,7 +186,7 @@ def create_match_element(row: dict):
                                     ]
                                 ),
                                 dmc.Text(row['radiant_name'], fw=700, size="sm", mt="sm") if row['radiant_name'] else
-                                dmc.Text(f'Radiant ID: {row['radiant_team_id']}'),
+                                dmc.Text(f'Radiant'),
                                 dmc.Text(f"MMR: {rad_rating}", size="xs", c="dimmed"),
                                 dmc.Text(f'Draft Score: {radiant_draft_score}', size="xs", c="dimmed")
                             ]),
@@ -203,7 +203,7 @@ def create_match_element(row: dict):
                                     bg="white", # Forces a background so transparent logos are visible
                                     children=[
                                         dmc.Image(
-                                            src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
+                                            src=row['dire_logo'] if row['dire_logo'] else '/assets/dire_icon.webp', 
                                             fallbackSrc='/assets/no_image.svg',
                                             w=50, h=50, 
                                             fit="contain"
@@ -211,7 +211,7 @@ def create_match_element(row: dict):
                                     ]
                                 ),
                                 dmc.Text(row['dire_name'], fw=700, size="sm", mt="sm") if row['dire_name'] else
-                                dmc.Text(f'Dire ID: {row['dire_team_id']}'),
+                                dmc.Text(f'Dire'),
                                 dmc.Text(f"MMR: {dire_rating}", size="xs", c="dimmed"),
                                 dmc.Text(f'Draft Score: {dire_draft_score}', size="xs", c="dimmed")
                             ])

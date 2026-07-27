@@ -164,7 +164,7 @@ def create_live_match_card(row):
                                     shadow="xs", radius="md", p=5, withBorder=True, bg="white", 
                                     children=[
                                         dmc.Image(
-                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/no_image.svg', 
+                                            src=row['radiant_logo'] if row['radiant_logo'] else '/assets/radiant_icon.webp', 
                                             fallbackSrc='/assets/no_image.svg',
                                             w=50, h=50, fit="contain"
                                         )
@@ -189,7 +189,7 @@ def create_live_match_card(row):
                                     shadow="xs", radius="md", p=5, withBorder=True, bg="white",
                                     children=[
                                         dmc.Image(
-                                            src=row['dire_logo'] if row['dire_logo'] else '/assets/no_image.svg', 
+                                            src=row['dire_logo'] if row['dire_logo'] else '/assets/dire_icon.webp', 
                                             fallbackSrc='/assets/no_image.svg',
                                             w=50, h=50, fit="contain"
                                         )

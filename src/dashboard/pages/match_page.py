@@ -46,34 +46,34 @@ def render_match_page(match_id):
             rad_name = rad[0][0]
             rad_logo = rad[0][1]
         else:
-            rad_name = f'Radiant ID: {rad_team_id}'
+            rad_name = f'Radiant'
             rad_logo = ''
     except Exception:
-        rad_name = f'Radiant ID: {rad_team_id}'
+        rad_name = f'Radiant'
         rad_logo = ''
         
     if not rad_logo:
         try:
             rad_logo = db_manager.select(logo_query, params={'team_id': rad_team_id})[0]
         except Exception:
-            rad_logo = '/assets/no_image.svg'
+            rad_logo = '/assets/radiant_icon.webp'
 
     try:
         if dire:
             dire_name = dire[0][0]
             dire_logo = dire[0][1]
         else:
-            dire_name = f'Dire ID: {dire_team_id}'
+            dire_name = f'Dire'
             dire_logo = ''
     except Exception:
-        dire_name = f'Dire ID: {dire_team_id}'
+        dire_name = f'Dire'
         dire_logo = ''
         
     if not dire_logo:
         try:
             dire_logo = db_manager.select(logo_query, params={'team_id': dire_team_id})[0]
         except Exception:
-            dire_logo = '/assets/no_image.svg'
+            dire_logo = '/assets/dire_icon.webp'
 
     query = '''
         SELECT 

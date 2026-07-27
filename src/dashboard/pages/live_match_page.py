@@ -45,8 +45,8 @@ def render_live_match_page(match_id, is_dev: bool):
     rad_prob = float(match.get('rad_win_predicted', 0.5))
     dire_prob = 1.0 - rad_prob
     
-    rad_logo = match.get('radiant_logo') or '/assets/no_image.svg'
-    dire_logo = match.get('dire_logo') or '/assets/no_image.svg'
+    rad_logo = match.get('radiant_logo') or '/assets/radiant_icon.webp'
+    dire_logo = match.get('dire_logo') or '/assets/dire_icon.webp'
     
     lead_value = match.get('radiant_lead', 0)
     if lead_value > 0:
