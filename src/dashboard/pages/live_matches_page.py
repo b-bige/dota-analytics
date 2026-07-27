@@ -23,6 +23,17 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         size='lg', 
         children=[ 
             dcc.Interval(id='live-update-timer', interval=15*1000, n_intervals=0),
+            dmc.Checkbox(
+                id='amateur-toggle',
+                labelPosition='right',
+                label='Show matches with only amateur or unknown teams',
+                color=COLORS['primary'],
+                variant='filled',
+                size='sm',
+                radius='sm',
+                disabled=False,
+                indeterminate=False
+            ),
             dmc.ScrollArea(
                 h=600, 
                 offsetScrollbars=True,
@@ -42,14 +53,31 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
 
 @callback(
         Output('live-match-container', 'children'),
-        Input('live-update-timer', 'n_intervals')
+        Input('live-update-timer', 'n_intervals'),
+        Input('amateur-toggle', 'checked')
 )
-def update_live_ui(n):
-    results = db_manager.select_to_df( #TODO Change the active 
-        "SELECT * FROM live_matches WHERE status = 'active' ORDER BY start_date_time DESC" 
-    )
-    if results.empty:
-        return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")
+def update_live_ui(n, amateur_toggle):
+    if not amateur_toggle:
+        results = db_manager.select_to_df(
+            '''
+                SELECT * 
+                FROM live_matches lm
+                LEFT JOIN team_details radiant
+                ON lm.radiant_id = radiant.id
+                LEFT JOIN team_details dire
+                ON lm.dire_id = dire.id 
+                WHERE status = 'active' AND (radiant.name IS NOT NULL OR dire.name IS NOT NULL)
+                ORDER BY start_date_time DESC
+            '''
+        )
+        if results.empty:
+            return dmc.Text("No live pro matches right now.", c="dimmed", ta="center", mt="xl")
+    else:
+        results = db_manager.select_to_df( #TODO Change the active 
+            "SELECT * FROM live_matches WHERE status = 'active' ORDER BY start_date_time DESC" 
+        )
+        if results.empty:
+            return dmc.Text("No live matches right now.", c="dimmed", ta="center", mt="xl")
     return [create_live_match_card(row) for _, row in results.iterrows()]
 
 

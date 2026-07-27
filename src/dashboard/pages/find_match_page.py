@@ -15,6 +15,17 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
     return dmc.Container(
         size='lg',
         children=[ 
+            dmc.Checkbox(
+                id='amateur-toggle',
+                labelPosition='right',
+                label='Show matches with only amateur or unknown teams',
+                color=COLORS['primary'],
+                variant='filled',
+                size='sm',
+                radius='sm',
+                disabled=False,
+                indeterminate=False
+            ),
             dcc.Loading(
                 dmc.ScrollArea(
                     h=550,
@@ -55,10 +66,11 @@ def layout(page=1, league=None, startDate=None, endDate=None, **kwargs):
         State('url', 'pathname'),
         State('url', 'search'),
         Input('match-pagination', 'value'),
+        Input('amateur-toggle', 'checked'),
         *[Input(component_id, 'value') for component_id in FILTER_IDS.values()],
         prevent_initial_call=True
 )
-def update_match_container_and_pages(pathname, search, page_number, *args): 
+def update_match_container_and_pages(pathname, search, page_number, amateur_toggle, *args): 
     if pathname != '/find-match':
         return no_update
     triggered = ctx.triggered_id
@@ -66,10 +78,14 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
         f.filter_name: ctx.inputs.get(f'{f.component_id}.value')
         for f in FILTERS
     }
-    
+
     PAGE_SIZE = 20
     qb = QueryBuilder()
     Filter.handle_filters(qb, **filters)
+    if not amateur_toggle:
+        qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
+        qb.join('dire',    'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
+        qb.where('radiant.name IS NOT NULL OR dire.name IS NOT NULL')
     query, params = qb.build(select='COUNT(md.id)')
     total_records = db_manager.select(query, params=params)[0][0]
     total_pages = -(-total_records // PAGE_SIZE)  
@@ -90,7 +106,8 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
     qb.join('radiant', 'LEFT JOIN team_details radiant ON radiant.id = md."radiantTeamId"')
     qb.join('dire',    'LEFT JOIN team_details dire ON dire.id = md."direTeamId"')
     qb.join('ld',      'LEFT JOIN league_details ld ON md."leagueId" = ld.id')
-
+    if not amateur_toggle:
+        qb.where('radiant.name IS NOT NULL OR dire.name IS NOT NULL')
     query, params = qb.build(
         select='''
             md.id, md."radiantTeamId", md."direTeamId",
@@ -109,12 +126,12 @@ def update_match_container_and_pages(pathname, search, page_number, *args):
         'radiant_name', 'dire_name', 'radiant_logo', 'dire_logo', 'league_name',
         'rad_rating', 'dire_rating', 'radiant_draft_score', 'dire_draft_score'
     ]
+    print(query)
     matches = [dict(zip(columns, row)) for row in db_manager.select(query, params=params)]
     if len(matches) == 0:
         return dmc.Paper(dmc.Text('No matches found')), 0, 1
     elements = [create_match_element(row) for row in matches]
     return elements, total_pages, page_number
-    
 
 def create_match_element(row: dict):
     result_color = COLORS['radiant'] if row['radiant_win'] else COLORS['dire']
