@@ -10,11 +10,13 @@
 * **204k+** matches processed & **73k+** players rated.
 * **Production LightGBM Engine** outperforming baseline logistic regression on unseen data.
 * **Real-Time Probability Bars** driven by live draft strength and skill differential extraction.
+* **Calibrated Win Probabilities:** Maintained an Expected Calibration Error (ECE) of $<1.8\%$ ($0.0173$) and a Brier Score of $0.2297$ on unseen patch data, ensuring predicted probabilities mirror true empirical win rates.
 
 ---
 
 ### 🛠️ Core Engine
 * **ML Pipeline:** Transitioned from baseline Logistic Regression to an ensembled **LightGBM** architecture, optimized for high-dimensional, non-linear interactions between hero synergies and player skill.
+* **Model Calibration & Diagnostics:** Evaluated win probability reliability using binned Expected Calibration Error (ECE) and Brier Score Loss. Benchmarked raw model outputs against post-hoc calibration techniques (Platt Scaling & Isotonic Regression) via calibration curves to verify that output logits are well-calibrated without requiring additional post-processing.
 * **Model Interpretation:** Leverages **SHAP (SHapley Additive exPlanations)** log-odds to mathematically isolate draft strength variables from team skill differentials, delivering multi-dimensional predictive metrics in real-time.
 * **Live Monitor:** `systemd` service executing high-frequency polling against **Valve's Official Steam Web API**, utilizing exponential backoff 
 * **Rating System:** **OpenSkill (PlackettLuce)** model tracking global player skill progression.
